@@ -1,0 +1,39 @@
+assembly:
+  name: "Valve Cover Assembly"
+  confidence_threshold: 0.75
+  inspection_timeout_s: 30
+
+camera:
+  width: 512
+  height: 512
+  eye: [0.0, 0.0, 0.6]
+  target: [0.0, 0.0, 0.0]
+  up: [0.0, 1.0, 0.0]
+  fov: 60
+
+parts:
+  base_plate:   {color: gray,   description: "flat gray rectangular base plate"}
+  gasket:       {color: orange, description: "thin orange rectangular gasket"}
+  cover:        {color: blue,   description: "blue rectangular cover plate"}
+  bolt:         {color: red,    description: "small red bolt heads at the corners"}
+  wrong_gasket: {color: green,  description: "thin green gasket (incorrect part)"}
+
+steps:
+  - id: 1
+    name: "Place base plate"
+    required_parts: [base_plate]
+    instruction: "Place the gray base plate on the fixture."
+  - id: 2
+    name: "Insert gasket"
+    required_parts: [base_plate, gasket]
+    instruction: "Insert the orange gasket on top of the base plate."
+  - id: 3
+    name: "Attach cover"
+    required_parts: [base_plate, gasket, cover]
+    instruction: "Attach the blue cover over the gasket."
+  - id: 4
+    name: "Install bolts"
+    required_parts: [base_plate, gasket, cover, bolt]
+    instruction: "Add the four red bolts to the corners of the cover."
+
+decoy_parts: [wrong_gasket]

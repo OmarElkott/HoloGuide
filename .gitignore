@@ -1,1 +1,11 @@
+__pycache__/
+*.pyc
 .venv/
+venv/
+.env
+.pytest_cache/
+outputs/
+runs/
+models/
+*.mp4
+*.log
