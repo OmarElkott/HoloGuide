@@ -1,50 +1,45 @@
-"""Shared data contracts for HoloGuide.
-
-Observation = what the AI says it sees (untrusted input).
-Decision    = what the deterministic rules decide to do (trusted output).
-"""
-
+from __future__ import annotations
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
 
 class Observation(BaseModel):
-    """Structured result returned by the vision model for one image."""
-
+    """What the AI inspector reports about ONE image. It never decides workflow."""
     parts_detected: list[str] = Field(
-        default_factory=list,
-        description="Names of assembly parts visible in the image.",
-    )
+        default_factory=list, description="Part names visible in the image")
     missing_parts: list[str] = Field(
-        default_factory=list,
-        description="Expected parts for this step that are NOT visible.",
-    )
+        default_factory=list, description="Expected parts that are not visible")
     wrong_parts: list[str] = Field(
-        default_factory=list,
-        description="Visible parts that do not belong in this assembly.",
-    )
-    confidence: float = Field(
-        ge=0.0, le=1.0, description="Confidence from 0.0 to 1.0."
-    )
-    rationale: str = Field(
-        default="", description="One short sentence explaining what was seen."
-    )
+        default_factory=list, description="Visible parts that should not be there")
+    confidence: float = Field(0.0, ge=0.0, le=1.0)
+    rationale: str = Field("", description="One short sentence explaining what was seen")
 
 
-class Action(str, Enum):
-    PASS = "pass"        # step verified, workflow may advance
-    BLOCK = "block"      # mistake found, workflow must not advance
-    REVIEW = "review"    # AI uncertain, operator must decide
-    HOLD = "hold"        # AI failed or timed out, safe stop
+class DecisionStatus(str, Enum):
+    PASS = "pass"                    # step verified, workflow may advance
+    BLOCK = "block"                  # mistake found, workflow stays on this step
+    NEEDS_REVIEW = "needs_review"    # AI unsure, operator must look
+    HOLD = "hold"                    # AI timeout/failure, safe stop
+
+
+class DecidedBy(str, Enum):
+    RULE = "rule"
+    OPERATOR = "operator"
+    SYSTEM = "system"
 
 
 class Decision(BaseModel):
-    """The rules engine's final ruling for one inspection."""
-
+    """What the deterministic workflow decides. Only the control layer creates this."""
     step_id: int
-    action: Action
+    status: DecisionStatus
     message: str
-    decided_by: Literal["rule", "operator", "timeout"] = "rule"
-    observation: Optional[Observation] = None
+    decided_by: DecidedBy = DecidedBy.RULE
+    observation: Observation | None = None
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+def uncertain_observation(reason: str) -> Observation:
+    """Safe fallback when the AI output cannot be parsed or the call fails."""
+    return Observation(confidence=0.0, rationale=reason)

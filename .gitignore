@@ -4,8 +4,10 @@ __pycache__/
 venv/
 .env
 .pytest_cache/
-outputs/
-runs/
 models/
+runs/
+outputs/
 *.mp4
-*.log
+*.onnx
+*.pth
+*.gguf

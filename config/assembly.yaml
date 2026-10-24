@@ -1,39 +1,57 @@
-assembly:
-  name: "Valve Cover Assembly"
-  confidence_threshold: 0.75
-  inspection_timeout_s: 30
+name: "Sealed Cover Assembly"
 
+# Rules engine thresholds (used from Day 8)
+confidence_threshold: 0.70   # below this, the result goes to operator review
+ai_timeout_s: 20             # if the AI takes longer, the workflow holds safely
+
+# Fixed overhead camera (used by the renderer)
 camera:
-  width: 512
-  height: 512
-  eye: [0.0, 0.0, 0.6]
-  target: [0.0, 0.0, 0.0]
-  up: [0.0, 1.0, 0.0]
-  fov: 60
+  width: 640
+  height: 480
+  target: [0.0, 0.0, 0.03]
+  distance: 0.75
+  yaw: 45
+  pitch: -55
 
+# color_rgb values are 0-1. Colors are deliberately distinct so a 4B model can tell them apart.
 parts:
-  base_plate:   {color: gray,   description: "flat gray rectangular base plate"}
-  gasket:       {color: orange, description: "thin orange rectangular gasket"}
-  cover:        {color: blue,   description: "blue rectangular cover plate"}
-  bolt:         {color: red,    description: "small red bolt heads at the corners"}
-  wrong_gasket: {color: green,  description: "thin green gasket (incorrect part)"}
+  - name: base_plate
+    display_name: "Base plate"
+    shape: box
+    color_rgb: [0.55, 0.55, 0.60]
+  - name: gasket
+    display_name: "Gasket"
+    shape: box
+    color_rgb: [1.00, 0.55, 0.00]
+  - name: cover
+    display_name: "Cover"
+    shape: box
+    color_rgb: [0.10, 0.30, 0.90]
+  - name: bolts
+    display_name: "Bolts (x4)"
+    shape: cylinder
+    color_rgb: [0.85, 0.10, 0.10]
+  # Decoy for the "wrong part" mistake
+  - name: wrong_cover
+    display_name: "Wrong cover (green)"
+    shape: box
+    color_rgb: [0.10, 0.70, 0.20]
+    is_decoy: true
 
 steps:
   - id: 1
     name: "Place base plate"
-    required_parts: [base_plate]
-    instruction: "Place the gray base plate on the fixture."
+    instruction: "Place the grey base plate on the work surface."
+    adds_parts: [base_plate]
   - id: 2
     name: "Insert gasket"
-    required_parts: [base_plate, gasket]
-    instruction: "Insert the orange gasket on top of the base plate."
+    instruction: "Place the orange gasket on the base plate."
+    adds_parts: [gasket]
   - id: 3
     name: "Attach cover"
-    required_parts: [base_plate, gasket, cover]
     instruction: "Attach the blue cover over the gasket."
+    adds_parts: [cover]
   - id: 4
     name: "Install bolts"
-    required_parts: [base_plate, gasket, cover, bolt]
-    instruction: "Add the four red bolts to the corners of the cover."
-
-decoy_parts: [wrong_gasket]
+    instruction: "Insert the four red bolts into the corners."
+    adds_parts: [bolts]
