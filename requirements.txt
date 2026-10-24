@@ -1,0 +1,21 @@
+# Simulation
+pybullet>=3.2.5
+numpy>=1.26
+
+# Vision / AI (Gemma 3 via Ollama)
+ollama>=0.4
+pillow>=10.0
+opencv-python>=4.9
+
+# Validation and config
+pydantic>=2.5
+pyyaml>=6.0
+
+# Dashboard
+streamlit>=1.35
+
+# Testing
+pytest>=8.0
+
+py_trees>=2.2
+pandas>=2.0
