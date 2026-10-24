@@ -1,30 +1,50 @@
-assembly_name: Valve Cover Assembly
-confidence_threshold: 0.7
-camera:
-  width: 512
-  height: 512
-  eye: [0.0, -0.35, 0.55]
-  target: [0.0, 0.0, 0.02]
-  fov: 55
-parts:
-  base:   {color: [0.55, 0.55, 0.60], shape: box,      size: [0.12, 0.12, 0.02]}
-  gasket: {color: [0.10, 0.10, 0.10], shape: box,      size: [0.11, 0.11, 0.004]}
-  cover:  {color: [0.15, 0.35, 0.85], shape: box,      size: [0.10, 0.10, 0.015]}
-  bolts:  {color: [0.90, 0.20, 0.15], shape: cylinder, size: [0.008, 0.02]}
-steps:
-  - id: 1
-    name: Place base
-    required_parts: [base]
-    instruction: Place the base plate on the fixture.
-  - id: 2
-    name: Insert gasket
-    required_parts: [base, gasket]
-    instruction: Insert the black gasket on top of the base.
-  - id: 3
-    name: Attach cover
-    required_parts: [base, gasket, cover]
-    instruction: Attach the blue cover over the gasket.
-  - id: 4
-    name: Add bolts
-    required_parts: [base, gasket, cover, bolts]
-    instruction: Add the four red bolts at the corners of the cover.
+"""Shared data contracts for HoloGuide.
+
+Observation = what the AI says it sees (untrusted input).
+Decision    = what the deterministic rules decide to do (trusted output).
+"""
+
+from enum import Enum
+from typing import Literal, Optional
+
+from pydantic import BaseModel, Field
+
+
+class Observation(BaseModel):
+    """Structured result returned by the vision model for one image."""
+
+    parts_detected: list[str] = Field(
+        default_factory=list,
+        description="Names of assembly parts visible in the image.",
+    )
+    missing_parts: list[str] = Field(
+        default_factory=list,
+        description="Expected parts for this step that are NOT visible.",
+    )
+    wrong_parts: list[str] = Field(
+        default_factory=list,
+        description="Visible parts that do not belong in this assembly.",
+    )
+    confidence: float = Field(
+        ge=0.0, le=1.0, description="Confidence from 0.0 to 1.0."
+    )
+    rationale: str = Field(
+        default="", description="One short sentence explaining what was seen."
+    )
+
+
+class Action(str, Enum):
+    PASS = "pass"        # step verified, workflow may advance
+    BLOCK = "block"      # mistake found, workflow must not advance
+    REVIEW = "review"    # AI uncertain, operator must decide
+    HOLD = "hold"        # AI failed or timed out, safe stop
+
+
+class Decision(BaseModel):
+    """The rules engine's final ruling for one inspection."""
+
+    step_id: int
+    action: Action
+    message: str
+    decided_by: Literal["rule", "operator", "timeout"] = "rule"
+    observation: Optional[Observation] = None
