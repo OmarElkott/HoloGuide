@@ -67,6 +67,12 @@ user confirmed connected GitHub account OmarWaled234.
 
 ## Fresh-clone and submission checklist
 
+Verification on this branch: 98 tests passed in the implementation checkout and
+98 passed in a clean local Git clone, using the same installed venv. Streamlit
+AppTest exercises placement, inspection, progress, blank-reason disablement, and
+typed override. Whitespace checks passed. This does not establish full dependency
+installation, real model performance, offline behavior or submission readiness.
+
 - Clone the PR branch into a clean directory; install requirements in a new venv.
 - Run `python -m pytest -q`; retain actual output and environment versions.
 - Launch Streamlit from repo root; exercise correct assembly, missing/wrong/future
