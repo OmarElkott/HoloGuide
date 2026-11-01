@@ -76,13 +76,13 @@ class DashboardSession:
     def inspect(self, revision=None):
         self._consume(revision)
         self.render()
-        self.inspected_frame = self.frame
-        self.inspected_step_id = self.workflow.current_step_id
+        step_id = self.workflow.current_step_id
         start = perf_counter()
-        try:
-            return self.workflow.request_inspection(self.frame)
-        finally:
-            self.latency_s = perf_counter() - start
+        decision = self.workflow.request_inspection(self.frame)
+        self.latency_s = perf_counter() - start
+        self.inspected_frame = self.frame
+        self.inspected_step_id = step_id
+        return decision
 
     def override(self, approve, reason, operator, revision=None):
         self._consume(revision)

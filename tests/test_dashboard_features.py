@@ -74,6 +74,16 @@ def test_step_id_adapter_is_explicit(assembly_config):
     assert isinstance(StepIdInspectorAdapter(Inspector()).inspect(Path('frame.png'), assembly_config.step(2)), Observation)
 
 
+def test_guard_rejection_does_not_claim_image_was_inspected(tmp_path):
+    session = DashboardSession(tmp_path)
+    session.place('cover')
+    with pytest.raises(RuntimeError, match='order guard'):
+        session.inspect()
+    assert session.inspected_frame is None
+    assert session.inspected_step_id is None
+    assert session.workflow.inspector.inspection_count == 0
+
+
 def test_scripted_demo_runs_scenarios_review_hold_and_logged_override(tmp_path):
     demo = DemoController(tmp_path)
     while demo.running:
