@@ -17,12 +17,13 @@ from src.vision.schemas import DecisionStatus, Observation
 from src.evaluation.metrics import (
     accuracy_by_mistake_type, false_block_rate, latency_statistics,
 )
+from src.evaluation.provenance import collect
 
 FIELDS = ['image_path', 'step_id', 'mistake_type', 'expected_status', 'status',
-          'confidence', 'latency_s', 'message', 'rationale', 'error', 'inspector']
+          'confidence', 'latency_s', 'message', 'rationale', 'error', 'inspector', 'timed_out']
 
 
-def run(manifest, inspector, config, output):
+def run(manifest, inspector, config, output, *, model=None, endpoint=None):
     """Inspect independent cases; only path and StepSpec reach the inspector.
 
     Validate the complete manifest before invoking inspection or writing results.
@@ -32,7 +33,8 @@ def run(manifest, inspector, config, output):
     manifest, output = Path(manifest), Path(output)
     summary_path = output.with_suffix('.summary.json')
     table_path = output.with_suffix('.tables.md')
-    if output.exists() or summary_path.exists() or table_path.exists():
+    provenance_path = output.with_suffix('.provenance.json')
+    if any(path.exists() for path in (output, summary_path, table_path, provenance_path)):
         raise FileExistsError('choose a new output path for this evaluation run')
     with manifest.open(encoding='utf-8', newline='') as stream:
         reader = csv.DictReader(stream)
@@ -55,10 +57,12 @@ def run(manifest, inspector, config, output):
             raise FileNotFoundError(image)
         prepared.append((case, image, config.step(step_id)))
     rows = []
+    provenance = collect(manifest, config, inspector, prepared, model=model, endpoint=endpoint)
     for case, image, step in prepared:
         start = perf_counter()
         error = ''
         observation = None
+        timed_out = False
         try:
             observation = Observation.model_validate(inspector.inspect(image, step))
             decision = evaluate(observation, step, config.confidence_threshold,
@@ -67,6 +71,7 @@ def run(manifest, inspector, config, output):
         except Exception as exc:
             status, message = 'hold', 'Inspection failed; no approval.'
             error = f'{type(exc).__name__}: {exc}'
+            timed_out = isinstance(exc, TimeoutError)
         elapsed = perf_counter() - start
         rows.append({
             'image_path': case['image_path'], 'step_id': step.id,
@@ -76,6 +81,7 @@ def run(manifest, inspector, config, output):
             'latency_s': elapsed, 'message': message,
             'rationale': observation.rationale if observation else '',
             'error': error, 'inspector': type(inspector).__name__,
+            'timed_out': timed_out,
         })
     summary = {
         'inspector': type(inspector).__name__,
@@ -85,8 +91,11 @@ def run(manifest, inspector, config, output):
         'latency': latency_statistics(row['latency_s'] for row in rows),
         'status_counts': dict(Counter(row['status'] for row in rows)),
         'error_count': sum(bool(row['error']) for row in rows),
+        'timeout_count': sum(row['timed_out'] for row in rows),
     }
     output.parent.mkdir(parents=True, exist_ok=True)
+    with provenance_path.open('x', encoding='utf-8') as stream:
+        json.dump(provenance, stream, indent=2, allow_nan=False)
     with output.open('x', encoding='utf-8', newline='') as stream:
         writer = csv.DictWriter(stream, fieldnames=FIELDS)
         writer.writeheader()
@@ -112,10 +121,26 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('manifest', type=Path)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--inspector-factory', help='module:function returning configured real inspector')
+    parser.add_argument('--step-id-interface', action='store_true', help='adapt P2 inspect(path, step_id) to P3 StepSpec interface')
+    parser.add_argument('--model')
+    parser.add_argument('--endpoint')
     args = parser.parse_args()
     config = load_config()
-    _, summary = run(args.manifest, MockInspector(config), config, args.output)
-    print('MOCK evaluation only; not measured AI performance.')
+    if args.inspector_factory:
+        import importlib
+        module, name = args.inspector_factory.split(':', 1)
+        inspector = getattr(importlib.import_module(module), name)()
+        if args.step_id_interface:
+            from src.dashboard.backends import StepIdInspectorAdapter
+            inspector = StepIdInspectorAdapter(inspector)
+    else:
+        if args.step_id_interface:
+            parser.error('--step-id-interface requires --inspector-factory')
+        inspector = MockInspector(config)
+    _, summary = run(args.manifest, inspector, config, args.output,
+                     model=args.model, endpoint=args.endpoint)
+    print('MOCK evaluation only; not measured AI performance.' if summary['mock'] else 'Configured inspector evaluation; verify provenance before interpreting results.')
     print(json.dumps(summary, indent=2))
 
 
