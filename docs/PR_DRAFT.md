@@ -46,3 +46,12 @@ the previously pushed branch still has no PR and its history is preserved. New
 dashboard, report, correction and documentation work is separated into focused
 commits for review; shared history was not rewritten. Shared schemas and teammate
 internals are unchanged. No generated outputs, models, secrets or venvs are staged.
+
+## Actual GitHub handoff (November 1)
+
+The branch push succeeded. Search found no existing Person 4 PR. Creating a draft
+PR through the connected account failed at `POST /repos/OmarElkott/HoloGuide/pulls`
+with HTTP 403: `Resource not accessible by integration`. No PR number or URL exists.
+Open it manually at:
+https://github.com/OmarElkott/HoloGuide/compare/main...feat/person4-evaluation-dashboard
+Use the title/body above. The connected account is the confirmed OmarWaled234.

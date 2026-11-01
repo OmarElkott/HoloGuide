@@ -226,7 +226,9 @@ submission actions are performed automatically.
 
 Next actions in order:
 
-1. P3 reviews this Person 4 PR for authority boundaries; group leader confirms main
+1. User opens the draft PR from the pushed branch: automatic creation returned
+   HTTP 403 `Resource not accessible by integration`; see docs/PR_DRAFT.md for
+   exact operation and manual link. P3 reviews authority boundaries; leader confirms main
    as current integration base and resolves roadmap/dev mismatch. Discuss issue
    labels and branch protection/review enforcement; no admin changes made here.
 2. P1 finishes/merges environment placement/removal, scenarios/panel and labelled
