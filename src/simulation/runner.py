@@ -76,6 +76,7 @@ class ScenarioRunner:
             self._tick()
         except Exception as exc:
             self.result.error = f'{type(exc).__name__}: {exc}'
+            self.result.completed = False
             self.done = True
         return self.result
 

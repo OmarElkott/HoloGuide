@@ -166,3 +166,25 @@ show_launcher(st, st.session_state.session)
     assert session.scenario_runner.result.completed
     assert session.scenario_runner.result.recovered
     session.close()
+
+
+def test_recovery_records_factory_failure_and_continues(tmp_path):
+    from src.evaluation.recovery import run_trials
+    def broken_factory():
+        raise RuntimeError('model unavailable')
+    rows = run_trials(tmp_path / 'trial', broken_factory, runs=1)
+    assert len(rows) == 4
+    assert all(not r['completed'] and 'model unavailable' in r['error'] for r in rows)
+    assert (tmp_path / 'trial/provenance.json').exists()
+    assert (tmp_path / 'trial/summary.json').exists()
+    with (tmp_path / 'trial/recovery.csv').open() as stream:
+        assert len(list(csv.DictReader(stream))) == 4
+
+
+def test_rehearsal_all_scenarios(tmp_path):
+    from src.simulation.rehearsal import rehearse
+    results = rehearse(tmp_path / 'rehearsal')
+    assert len(results) == 4
+    assert all(r['completed'] for r in results)
+    with Image.open(tmp_path / 'rehearsal/rehearsal.gif') as animation:
+        assert animation.n_frames == 19

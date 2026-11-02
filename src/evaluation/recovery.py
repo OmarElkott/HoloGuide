@@ -2,13 +2,14 @@
 import argparse
 import csv
 import json
+import os
 from dataclasses import asdict
 from pathlib import Path
 from src.config import load_config
 from src.control.audit_log import AuditLog
 from src.control.workflow import Workflow
 from src.simulation.assembly_env import AssemblyEnv
-from src.simulation.runner import ScenarioRunner, load_inspector
+from src.simulation.runner import RunResult, ScenarioRunner, load_inspector
 from src.simulation.scenarios import NAMES
 
 
@@ -20,28 +21,54 @@ def run_trials(output, inspector_factory, *, runs=20, seed=0, evidence='unverifi
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
     config = load_config()
-    rows = []
-    for scenario in NAMES:
-        for trial in range(runs):
-            directory = output / scenario / str(trial)
-            inspector = inspector_factory()
-            with AssemblyEnv(config, seed=seed + trial, randomize=True) as env:
-                workflow = Workflow(config, inspector, AuditLog(directory / 'audit.jsonl'))
-                result = ScenarioRunner(scenario, env, workflow, directory / 'frames').run()
-            row = asdict(result)
-            row.update(trial=trial, seed=seed + trial, evidence=evidence,
-                       inspector=type(inspector).__name__)
-            row['decisions'] = json.dumps(row['decisions'])
-            rows.append(row)
-    with (output / 'recovery.csv').open('x', newline='', encoding='utf-8') as stream:
-        writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
+    # Write provenance before running: interrupted runs remain interpretable.
     (output / 'provenance.json').write_text(json.dumps({
         'evidence': evidence, 'runs_per_scenario': runs, 'seed': seed,
         'config': config.model_dump(mode='json'),
         'interpretation': 'Test doubles establish plumbing only, never AI performance. Recovery requires block then correction pass; completion is reported separately.'
     }, indent=2), encoding='utf-8')
+    rows = []
+    fields = list(asdict(RunResult(''))) + ['trial', 'seed', 'evidence', 'inspector']
+    with (output / 'recovery.csv').open('x', newline='', encoding='utf-8') as stream:
+        writer = csv.DictWriter(stream, fieldnames=fields)
+        writer.writeheader()
+        for scenario in NAMES:
+            for trial in range(runs):
+                directory = output / scenario / str(trial)
+                inspector = None
+                result = RunResult(scenario, error='Trial interrupted before completion')
+                try:
+                    inspector = inspector_factory()
+                    with AssemblyEnv(config, seed=seed + trial, randomize=True) as env:
+                        workflow = Workflow(config, inspector, AuditLog(directory / 'audit.jsonl'))
+                        result = ScenarioRunner(scenario, env, workflow, directory / 'frames').run()
+                except Exception as exc:
+                    result = RunResult(scenario, error=f'{type(exc).__name__}: {exc}')
+                finally:
+                    # A factory supplies one owned inspector per trial.
+                    close = getattr(inspector, 'close', None)
+                    if close:
+                        try:
+                            close()
+                        except Exception as exc:
+                            result.error = (result.error or '') + f' Inspector cleanup failed: {exc}'
+                            result.completed = False
+                row = asdict(result)
+                row.update(trial=trial, seed=seed + trial, evidence=evidence,
+                           inspector=type(inspector).__name__ if inspector else 'unavailable')
+                row['decisions'] = json.dumps(row['decisions'])
+                rows.append(row)
+                writer.writerow(row)
+                stream.flush()
+                os.fsync(stream.fileno())
+    summary = {}
+    for scenario in NAMES:
+        group = [r for r in rows if r['scenario'] == scenario]
+        summary[scenario] = dict(runs=len(group), completed=sum(r['completed'] for r in group),
+            recovered=sum(r['recovered'] for r in group) if scenario != 'correct' else None,
+            errors=sum(bool(r['error']) for r in group))
+    (output / 'summary.json').write_text(json.dumps({'evidence': evidence, 'scenarios': summary},
+                                                   indent=2), encoding='utf-8')
     return rows
 
 
