@@ -44,33 +44,43 @@ class AssemblyEnv:
         )
 
         self._parts.clear()
+        self._rng = np.random.default_rng(self.seed)
+        self._yaw_delta = float(self._rng.uniform(-3, 3)) if self.randomize else 0.0
+        self._pitch_delta = float(self._rng.uniform(-2, 2)) if self.randomize else 0.0
+        self._light = [1.0, 1.0, 3.0]
+        if self.randomize:
+            self._light[:2] = self._rng.uniform(0.6, 1.4, 2).tolist()
 
-    def render_to_file(self, path: str) -> str:
-        """Capture and save an RGB image from the virtual camera."""
         camera = self.config.camera
 
-        view = p.computeViewMatrixFromYawPitchRoll(
+        self._view = p.computeViewMatrixFromYawPitchRoll(
             camera.target,
             camera.distance,
-            camera.yaw,
-            camera.pitch,
+            camera.yaw + self._yaw_delta,
+            camera.pitch + self._pitch_delta,
             0,
             2,
         )
 
-        projection = p.computeProjectionMatrixFOV(
+        self._projection = p.computeProjectionMatrixFOV(
             60,
             camera.width / camera.height,
             0.05,
             3.0,
         )
 
+
+    def render_to_file(self, path: str) -> str:
+        """Capture and save an RGB image from the virtual camera."""
+        camera = self.config.camera
+
         _, _, rgba, _, _ = p.getCameraImage(
             camera.width,
             camera.height,
-            view,
-            projection,
+            self._view,
+            self._projection,
             renderer=p.ER_TINY_RENDERER,
+            lightDirection=self._light,
             physicsClientId=self.client,
         )
 
@@ -166,6 +176,9 @@ class AssemblyEnv:
                 body_ids.append(body)
 
         self._parts[part] = body_ids
+        if self.randomize:
+            dx, dy = self._rng.uniform(-0.003, 0.003, 2)
+            self.offset_part(part, float(dx), float(dy))
 
 
     
@@ -194,3 +207,20 @@ class AssemblyEnv:
         """Disconnect from the physics engine."""
         if p.isConnected(self.client):
             p.disconnect(physicsClientId=self.client)
+
+    def offset_part(self, part: str, dx: float, dy: float) -> None:
+        """Translate an entire component for an explicitly injected alignment fault."""
+        if part not in self._parts:
+            raise ValueError(f"{part} is not currently placed")
+        if not np.isfinite([dx, dy]).all():
+            raise ValueError("Offsets must be finite")
+        for body in self._parts[part]:
+            position, orientation = p.getBasePositionAndOrientation(body, physicsClientId=self.client)
+            p.resetBasePositionAndOrientation(body, [position[0]+dx, position[1]+dy, position[2]],
+                                             orientation, physicsClientId=self.client)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.close()

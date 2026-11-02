@@ -163,7 +163,9 @@ def main():
                    'injected timeout, recovery, and a logged demonstration override. No real model timing.')
         play_demo()
     else:
-        show_session(session)
+        from src.dashboard.scenario_launcher import show_launcher
+        show_launcher(st, session)
+        show_session(session, controls=getattr(session, 'scenario_runner', None) is None)
 
 
 if __name__ == '__main__':

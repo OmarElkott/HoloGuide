@@ -144,3 +144,28 @@ are claimed to ship here. All failures remain in results; the runner relies on
 P2's bounded timeout implementation and does not create a competing timeout engine.
 
 See `docs/PERSON4_WRITEUP.md` for the writeup, task status, and submission checklist.
+
+## Partner 1 rendered simulation contribution
+
+See [simulation, dataset and recovery documentation](docs/PARTNER1_TECHNICAL.md),
+[demo script and recording plan](docs/PARTNER1_DEMO.md), and
+[delivery status](docs/PARTNER1_STATUS.md).
+
+![HoloGuide architecture](docs/architecture.png)
+
+### Windows / Python 3.11
+
+Open PowerShell in the repository. Python 3.11 and Git are prerequisites.
+The following installation command downloads packages; run it only when network use is authorized.
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m src.simulation.dataset --output outputs/dataset-v2 --randomize --seed 2026
+.\.venv\Scripts\python.exe -m streamlit run src/dashboard/app.py
+```
+
+Using the executable directly avoids PowerShell activation-policy problems. Installation and model provisioning require internet, but rendering and tests use local resources. Provision the chosen real model before disconnecting Wi-Fi. Do not download or pull a model during the offline demo. Follow the real-inspector factory instructions in the technical guide; no Partner 2 inspector currently ships on these integrated branches. The existing mock CLI remains available as `python -m src.control.cli --scenario missing_gasket` and is not AI inference.
+
+Roles: Partner 1 owns simulation, datasets, scenarios, recovery testing and demo preparation; Partner 2 owns vision/model inspection; Partner 3 owns rules, workflow and audit; Partner 4 owns dashboard and evaluation reporting. This contribution extends Partner 4's dashboard/evaluation seams and retains Partner 3's authorization logic.
