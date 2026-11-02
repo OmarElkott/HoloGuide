@@ -29,7 +29,7 @@ The isolated `partner1-completion` branch starts at the user's simulation commit
 
 ## Evidence
 
-The merged baseline passed 114 tests. Final suite: 128 passed in 11.39 seconds, including a Streamlit AppTest of the rendered wrong-cover launcher. Results are recorded in the accompanying test-results.txt. The generated datasets each have 200 actual PyBullet PNGs. Scripted integration recovery trials completed 80/80 assemblies with 60/60 expected fault block/correct/pass sequences. These are test-double results, not model accuracy or real recovery measurements. The correct controls are reported separately from fault recovery.
+The merged baseline passed 114 tests. Final suite: 130 passed in 11.91 seconds, including a Streamlit AppTest of the rendered wrong-cover launcher. Results are recorded in the accompanying test-results.txt. The generated datasets each have 200 actual PyBullet PNGs. Scripted integration recovery trials completed 80/80 assemblies with 60/60 expected fault block/correct/pass sequences. These are test-double results, not model accuracy or real recovery measurements. The correct controls are reported separately from fault recovery.
 
 ## What must happen next
 
@@ -40,3 +40,5 @@ On the demo PC, verify the real dashboard, perform the Wi-Fi-off rehearsal, reco
 ## Local handoff
 
 The source ZIP is a ready-to-inspect integrated snapshot. The Git bundle includes the complete local completion branch and preserves its ancestors. Clone the bundle locally into a new directory to retain history; do not overwrite an existing checkout. Generated images and trial outputs are supplied separately and remain ignored by Git. Review the integration with teammates before any remote merge. No user branch was force-updated.
+
+The contribution is now installed in C:\Users\muaad\HoloGuide on partner1-completion, and VS Code was launched for that folder. The original simulation branch remains unchanged. An offline four-scenario rehearsal was executed successfully using explicitly scripted observations; see outputs/rehearsal-001.
