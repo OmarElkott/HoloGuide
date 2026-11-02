@@ -85,13 +85,106 @@ class AssemblyEnv:
 
         return str(output)
 
+    
     def place_part(self, part: str) -> None:
-        """Add a part (to be implemented in SIM-02)."""
-        raise NotImplementedError("Coming in SIM-02")
+        """Place a manufacturing component into the simulation."""
 
+        if part in self._parts:
+            raise ValueError(f"{part} is already placed")
+
+        known_parts = {item.name for item in self.config.parts}
+        if part not in known_parts:
+            raise ValueError(f"Unknown part: {part}")
+
+        rgb = self.config.part(part).color_rgb
+        body_ids = []
+
+        def add_box(half_extents, position):
+            visual = p.createVisualShape(
+                p.GEOM_BOX,
+                halfExtents=half_extents,
+                rgbaColor=[*rgb, 1],
+                physicsClientId=self.client,
+            )
+            collision = p.createCollisionShape(
+                p.GEOM_BOX,
+                halfExtents=half_extents,
+                physicsClientId=self.client,
+            )
+            return p.createMultiBody(
+                baseMass=0,
+                baseCollisionShapeIndex=collision,
+                baseVisualShapeIndex=visual,
+                basePosition=position,
+                physicsClientId=self.client,
+            )
+
+        if part == "base_plate":
+            body_ids.append(
+                add_box([0.18, 0.18, 0.01], [0, 0, 0.01])
+            )
+
+        elif part == "gasket":
+            body_ids.append(
+                add_box([0.16, 0.16, 0.003], [0, 0, 0.023])
+            )
+
+        elif part in ("cover", "wrong_cover"):
+            body_ids.append(
+                add_box([0.12, 0.12, 0.015], [0, 0, 0.041])
+            )
+
+        elif part == "bolts":
+            positions = [
+                (0.10, 0.10),
+                (-0.10, 0.10),
+                (0.10, -0.10),
+                (-0.10, -0.10),
+            ]
+
+            for x, y in positions:
+                visual = p.createVisualShape(
+                    p.GEOM_CYLINDER,
+                    radius=0.012,
+                    length=0.03,
+                    rgbaColor=[*rgb, 1],
+                    physicsClientId=self.client,
+                )
+                collision = p.createCollisionShape(
+                    p.GEOM_CYLINDER,
+                    radius=0.012,
+                    height=0.03,
+                    physicsClientId=self.client,
+                )
+                body = p.createMultiBody(
+                    baseMass=0,
+                    baseCollisionShapeIndex=collision,
+                    baseVisualShapeIndex=visual,
+                    basePosition=[x * 1.35, y * 1.35, 0.059],
+                    physicsClientId=self.client,
+                )
+                body_ids.append(body)
+
+        self._parts[part] = body_ids
+
+
+    
     def remove_part(self, part: str) -> None:
-        """Remove a part (to be implemented in SIM-02)."""
-        raise NotImplementedError("Coming in SIM-02")
+        """Remove a manufacturing component from the simulation."""
+
+        if part not in self._parts:
+            raise ValueError(f"{part} is not currently placed")
+
+        body_ids = self._parts[part]
+
+        for body_id in body_ids:
+            p.removeBody(
+                body_id,
+                physicsClientId=self.client,
+            )
+
+        del self._parts[part]
+
 
     def parts_present(self) -> list[str]:
         """Return the currently tracked components."""
