@@ -165,7 +165,8 @@ def main():
     else:
         from src.dashboard.scenario_launcher import show_launcher
         show_launcher(st, session)
-        show_session(session, controls=getattr(session, 'scenario_runner', None) is None)
+        runner = getattr(session, 'scenario_runner', None)
+        show_session(session, controls=runner is None or runner.done)
 
 
 if __name__ == '__main__':

@@ -1,0 +1,58 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "HoloGuide: dashboard",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "streamlit",
+      "args": [
+        "run",
+        "src/dashboard/app.py",
+        "--server.address",
+        "127.0.0.1",
+        "--browser.gatherUsageStats",
+        "false"
+      ],
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "HoloGuide: all tests",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": [
+        "-q"
+      ],
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "HoloGuide: scripted rehearsal (not AI)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "src.simulation.rehearsal",
+      "args": [
+        "--output",
+        "${input:rehearsalOutput}"
+      ],
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ],
+  "inputs": [
+    {
+      "id": "rehearsalOutput",
+      "type": "promptString",
+      "description": "New output directory (must not exist)",
+      "default": "outputs/rehearsal-vscode-001"
+    }
+  ]
+}

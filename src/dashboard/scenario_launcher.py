@@ -18,9 +18,11 @@ def show_launcher(st, session):
     if runner is not None:
         if st.button('Play next scenario step', disabled=runner.done):
             with st.spinner('Rendering and inspecting scenario step…'):
+                inspected_step = session.workflow.current_step_id
                 runner.tick()
             session.frame = runner.frame
             session.inspected_frame = runner.frame
+            session.inspected_step_id = inspected_step
             session.revision += 1
             st.rerun()
         if runner.result.error:

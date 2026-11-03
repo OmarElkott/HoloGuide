@@ -188,3 +188,26 @@ def test_rehearsal_all_scenarios(tmp_path):
     assert all(r['completed'] for r in results)
     with Image.open(tmp_path / 'rehearsal/rehearsal.gif') as animation:
         assert animation.n_frames == 19
+
+
+def test_dashboard_restores_hold_recovery_after_scenario_stop(tmp_path):
+    from streamlit.testing.v1 import AppTest
+    from src.dashboard.session import DashboardSession
+    class TimeoutInspector:
+        def inspect(self, path, step):
+            raise TimeoutError('injected test timeout')
+    session = DashboardSession(directory=tmp_path, mode='real',
+        environment=AssemblyEnv(load_config()), inspector=TimeoutInspector())
+    try:
+        app = AppTest.from_file(Path(__file__).resolve().parents[1] / 'src/dashboard/app.py')
+        app.session_state['assembly'] = session
+        app.run()
+        next(b for b in app.button if b.label == 'Load scenario').click().run()
+        next(b for b in app.button if b.label == 'Play next scenario step').click().run()
+        assert not app.exception
+        assert session.workflow.state.value == 'hold'
+        assert session.inspected_step_id == 1
+        assert any(b.label == 'Acknowledge resolved hold' for b in app.button)
+    finally:
+        session.close()
+

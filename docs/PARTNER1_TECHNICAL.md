@@ -65,3 +65,9 @@ No Partner 2 real inspector is present in the inspected branches. Scripted test 
 Run `python -m src.simulation.rehearsal --output outputs/rehearsal-001` for an entirely local rendered rehearsal. It creates all four scenario episodes, audits, a JSON result file and a labeled animated GIF. Observations are prewritten test fixtures; neither image contents nor ground-truth labels are used for inference. This lets the team rehearse the flow without presenting a substitute as Partner 2's AI implementation.
 
 Recovery trials now write each CSV row immediately and flush it to disk. Factory failures are retained as failed trials instead of aborting the entire run; provenance is written before trials begin and the final summary separates correct controls from fault recovery. A fresh inspector returned by the factory is owned by the trial and closed when it supports close().
+
+## Running from VS Code
+
+Open Run and Debug and choose **HoloGuide: dashboard**, **HoloGuide: all tests**, or **HoloGuide: scripted rehearsal (not AI)**. These use the existing Windows `.venv` directly. The rehearsal asks for a new output directory to protect previous evidence. Debug launch requires the Python Debugger extension already installed; no extension was downloaded. **Terminal > Run Task > HoloGuide: run all tests** works through the supplied process task without a debugger extension. The dashboard binds to localhost and disables Streamlit usage statistics in this launch configuration.
+
+A stopped scenario now restores the ordinary dashboard controls so operators can clear HOLD or provide a reasoned override through the existing workflow. Inspected step metadata is retained when playback advances the workflow.
