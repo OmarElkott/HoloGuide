@@ -71,3 +71,14 @@ Recovery trials now write each CSV row immediately and flush it to disk. Factory
 Open Run and Debug and choose **HoloGuide: dashboard**, **HoloGuide: all tests**, or **HoloGuide: scripted rehearsal (not AI)**. These use the existing Windows `.venv` directly. The rehearsal asks for a new output directory to protect previous evidence. Debug launch requires the Python Debugger extension already installed; no extension was downloaded. **Terminal > Run Task > HoloGuide: run all tests** works through the supplied process task without a debugger extension. The dashboard binds to localhost and disables Streamlit usage statistics in this launch configuration.
 
 A stopped scenario now restores the ordinary dashboard controls so operators can clear HOLD or provide a reasoned override through the existing workflow. Inspected step metadata is retained when playback advances the workflow.
+
+
+## Measured rendering and playable rehearsal video
+
+`python -m src.simulation.benchmark --output outputs/render-benchmark-new --samples 30`
+
+The local Windows/Python 3.11.9 run measured 30 warm render-to-PNG samples at 640x480: median 0.07709 seconds and p95 0.08161 seconds. All 30 frames had identical SHA-256 values. This measures CPU TinyRenderer, PNG encoding and filesystem writes; it does not measure AI inference or GPU performance. NumPy was 2.4.6 and Pillow 13.0.0. PyBullet imported successfully but distribution metadata was absent, so its version is explicitly recorded as unknown. The first benchmark attempt failed during metadata collection; the corrected run is in outputs/render-benchmark-002/benchmark.json.
+
+`python -m src.simulation.export_video outputs/rehearsal-001 --output outputs/rehearsal-new.mp4`
+
+The exporter uses installed OpenCV, embeds a permanent scripted-evidence label, refuses existing output files, and decodes every output frame to verify dimensions and count. The delivered silent MP4 has 570 frames at 20 fps, 960x720, duration 28.5 seconds. It is a rendered storyboard, not a desktop recording, final three-minute video or evidence of real AI performance.

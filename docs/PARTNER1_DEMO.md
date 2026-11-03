@@ -33,3 +33,5 @@ Do not read invented accuracy numbers. If real evaluation is unfinished, say “
 6. Upload only after explicit permission. Verify the final accessible URL and competition requirements at that point. No upload or competition submission was performed here.
 
 The physical microphone check, recorder operation, Wi-Fi-off rehearsal, final GPU/model demonstration, second-device playback and final recording require the user's PC interaction. No final video is claimed to exist.
+
+A playable silent storyboard is now available at outputs/HoloGuide-scripted-rehearsal-v2.mp4. It covers all four rendered episodes in 28.5 seconds with a permanent scripted-observation label. This supplements the GIF; neither is the required narrated screen recording.
