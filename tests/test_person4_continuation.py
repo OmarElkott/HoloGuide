@@ -123,6 +123,7 @@ def test_real_controller_edge_actions_use_workflow_and_audit(tmp_path):
     assert events[-1]['event_type'] == 'operator_override'
     assert events[-1]['operator'] == 'demo-operator'
     assert 'DEMONSTRATION ONLY' in events[-1]['reason']
+    assert 'scripted operator approval' in events[-1]['reason']
     assert sum(e['event_type'] == 'demonstration_fault_armed' for e in events) == 3
     assert not demo.running
 

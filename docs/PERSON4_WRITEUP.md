@@ -182,3 +182,25 @@ No existing label was deleted or renamed, and no protection/bypass was changed.
 4. Operator performs [genuine offline checklist](PERSON4_OFFLINE_CHECKLIST.md),
    records actual local Gemma use and shares the evidence archive. Team completes
    final writeup/submission checks; P1's video remains P1-owned.
+
+## Verified delivery and preserved local evidence
+
+Draft [PR #4](https://github.com/OmarElkott/HoloGuide/pull/4) is verified open,
+base main, head fix/person4-final-integration; it is not merged. The connector's
+PR POST returned 403 Resource not accessible by integration. The existing Git
+credential under confirmed OmarWaled234 successfully created the PR, then its
+number/state/base/head were independently read through the GitHub connector.
+
+Clean-code smoke evidence at f3d82de277534efc6bb383a8e7260b736c87286e is preserved in
+outputs/person4-verified-sample-20261108. Both inspectors blocked the single
+archived missing-part image, with 0 errors/timeouts/HOLDs/reviews. OpenCV latency
+was 0.0390477 s, Hybrid 0.0260070 s (each n=1, therefore median=p95). These are
+local smoke timings, not final target-laptop performance. False-block rate is N/A
+because no correct cases were supplied; Gemma measurements are N/A and Hybrid's
+Gemma call count was 0. The original notebook SHA256 is recorded alongside the
+image, manifest, per-case CSV, tables and full provenance; working_tree_dirty=false.
+
+outputs/person4-evidence-20261108.zip packages this smoke evidence, GitHub hygiene
+snapshot and the offline checklist. This ignored archive is local, available to
+the user for sharing; it is not falsely linked as a remotely hosted team artifact.
+P2's missing final-evaluation archive is not reconstructed from summary numbers.

@@ -210,7 +210,7 @@ class RealDemoController:
                         raise RuntimeError(f'Expected demonstration {expected}, received {decision.status.value}: {decision.message}')
                 else:
                     decision = self.session.override(True,
-                        'DEMONSTRATION ONLY: operator manually verified the rendered base plate', 'demo-operator')
+                        'DEMONSTRATION ONLY: scripted operator approval of the rendered base plate', 'demo-operator')
                 self.history.append({'stage': stage, 'detail': decision.message,
                                      'audit_path': str(self.session.audit.path)})
             self.index += 1
