@@ -167,8 +167,9 @@ Hybrid choices await P2's measured go/no-go evidence.
 
 - P1 DOC-03c: **pending** simulation geometry, dataset generation/seeds, recovery
   trials and exported architecture image. The unmerged skeleton is not a final section.
-- P2 DOC-03d: **pending** model choice/topology, prompts, timeout/retry/fallback,
-  go/no-go measurements and real error analysis.
+- P2 DOC-03d: **done**, see [WRITEUP_AI_INSPECTION.md](WRITEUP_AI_INSPECTION.md) (model choice,
+  inspectors, prompts, timeout/retry/fallback, error analysis). Measured go/no-go results
+  for the table above are in [decisions.md](decisions.md).
 - P3 DOC-03e: final section **pending**. Existing CONTROL_MODULE_PROGRESS.md informs
   this draft: AI reports; control decides; order guard precedes placement; HOLD
   does not authorize progression; overrides require identity/reason and durable

@@ -165,7 +165,15 @@ $env:HOLOGUIDE_INSPECTOR_FACTORY = 'src.vision.factories:hybrid'   # dashboard r
 ```
 
 Measured results and the go/no-go choice are in `docs/decisions.md`; module details
-in `docs/VISION_MODULE.md`; the public notebook skeleton is `notebooks/hologuide_demo.ipynb`.
+in `docs/VISION_MODULE.md`; the writeup section is `docs/WRITEUP_AI_INSPECTION.md`.
+
+The public notebook `notebooks/hologuide_demo.ipynb` is saved with outputs. To re-run it top to bottom
+(uses Hybrid if a local Ollama serves `gemma3:4b`, otherwise OpenCV; never downloads a model):
+
+```powershell
+.venv/Scripts/python -m pip install nbconvert ipykernel
+.venv/Scripts/python -m jupyter nbconvert --to notebook --execute notebooks/hologuide_demo.ipynb --output-dir outputs/notebook-run
+```
 
 See `docs/PERSON4_WRITEUP.md` for the writeup, task status, and submission checklist.
 

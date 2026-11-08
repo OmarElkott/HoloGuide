@@ -1,6 +1,6 @@
 # HoloGuide - Vision / AI Inspection (Partner 2) - Handoff
 
-**Tasks:** VIS-01 to VIS-12 and DOC-04a, all done. Results and the go/no-go decision (option B, Hybrid) are in [`decisions.md`](decisions.md).
+**Tasks:** VIS-01 to VIS-12, DOC-03d (writeup section: [`WRITEUP_AI_INSPECTION.md`](WRITEUP_AI_INSPECTION.md)) and DOC-04a/04b (notebook), all done. Results and the go/no-go decision (option B, Hybrid) are in [`decisions.md`](decisions.md).
 **Core rule:** the AI reports, the rules decide. An inspector never raises, never sees ground truth, and never changes workflow state.
 
 ## What each file does
@@ -16,7 +16,7 @@
 | `src/vision/latency_benchmark.py`, `scripts/vis12_latency_benchmark.py` | VIS-12 | Median / p95 / timeouts for each inspector; N/A when an inspector is unavailable |
 | `scripts/vis05_latency_check.py` | VIS-05 | Warm-up, first-call vs steady latency, VRAM fraction |
 | `src/vision/error_analysis.py`, `scripts/vis06_run_gemma.py` | VIS-06 | Error analysis plus an A/B/C suggestion |
-| `notebooks/hologuide_demo.ipynb` | DOC-04a | Notebook skeleton: inspect one image, run a scenario, audit table, results |
+| `notebooks/hologuide_demo.ipynb` | DOC-04a, 04b | Public notebook (saved with outputs): inspect one image, full scenario, audit log, Needs Review/override and Hold edge cases, a 20-image evaluation, full results |
 | `tests/test_cv_inspector.py`, `test_hybrid_inspector.py`, `test_vision_factories.py`, `test_vis12_benchmark.py`, `test_vision_prompts.py`, `test_gemma_inspector.py`, `test_inspector_timeout.py`, `test_error_analysis.py` | all | No Ollama needed. The OpenCV tests render real PyBullet frames |
 
 ## How an image is inspected
@@ -84,5 +84,6 @@ OpenCV and Hybrid v1+v2: 100% on every mistake type, false-block 0%, median <= 0
 VIS-12 (40 images): Gemma 3.019 s median / 3.272 s p95; OpenCV 0.015 / 0.020; Hybrid 0.019 / 0.021; 0 timeouts
 Recovery (OpenCV, 20 runs per scenario): 20/20 recovered for missing_gasket, wrong_cover, wrong_order
 Suggested option: B (Hybrid)
+Notebook:        jupyter nbconvert --execute -> 10/10 code cells, 0 errors (Hybrid inspector)
 Open issues:     Gemma misses the orange gasket on a bare plate under randomised lighting (decisions.md)
 ```
