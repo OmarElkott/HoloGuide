@@ -35,3 +35,33 @@ def test_schema_restricts_part_names_and_certainty():
     schema = build_schema(cfg)
     assert set(schema["properties"]["parts_detected"]["items"]["enum"]) == {p.name for p in cfg.parts}
     assert schema["properties"]["certainty"]["enum"] == ["clear", "partly_clear", "unclear"]
+
+
+# ---- VIS-10 prompt v2: step-agnostic colour questions -------------------------
+
+def test_v2_prompt_is_step_agnostic_and_names_no_parts():
+    from vision.prompts import v2_questions
+    cfg = load_config()
+    prompts = {build_prompt(cfg, s, "v2") for s in cfg.steps}
+    assert len(prompts) == 1                       # no step name, no hints, no expectations
+    prompt = prompts.pop().lower()
+    for part in cfg.parts:
+        assert part.name not in prompt             # colour keys only, e.g. no "wrong_cover"
+    assert "may be empty" in prompt and "step" not in prompt
+    assert [part for _, part, _ in v2_questions(cfg)] == [p.name for p in cfg.parts]
+
+
+def test_v2_schema_has_one_boolean_per_part():
+    from vision.prompts import v2_questions
+    cfg = load_config()
+    schema = build_schema(cfg, "v2")
+    keys = [key for key, _, _ in v2_questions(cfg)]
+    assert all(schema["properties"][k] == {"type": "boolean"} for k in keys)
+    assert set(schema["required"]) == {*keys, "certainty", "rationale"}
+
+
+def test_unknown_prompt_version_is_rejected():
+    import pytest
+    cfg = load_config()
+    with pytest.raises(ValueError):
+        build_prompt(cfg, cfg.step(1), "v9")

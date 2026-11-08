@@ -28,13 +28,13 @@ if __package__ and __package__.startswith("src."):
     from ..config import AssemblyConfig
     from .inspector import (InspectorABC, TimeoutInspector, failure_observation,
                             resolve_step)
-    from .prompts import build_prompt, build_schema
+    from .prompts import PROMPT_VERSION, PROMPT_VERSIONS, build_prompt, build_schema, v2_questions
     from .schemas import Observation
 else:
     from config import AssemblyConfig
     from vision.inspector import (InspectorABC, TimeoutInspector, failure_observation,
                                   resolve_step)
-    from vision.prompts import build_prompt, build_schema
+    from vision.prompts import PROMPT_VERSION, PROMPT_VERSIONS, build_prompt, build_schema, v2_questions
     from vision.schemas import Observation
 
 DEFAULT_MODEL = "gemma3:4b"
@@ -67,6 +67,29 @@ def parse_reply(content: Any) -> _ModelReply:
         raise ReplyFormatError(f"malformed JSON reply: {str(exc)[:120]}") from exc
 
 
+def parse_reply_v2(content: Any, config: AssemblyConfig) -> _ModelReply:
+    """v2 reply: one boolean per colour question -> the parts answered true."""
+    if not isinstance(content, str) or not content.strip():
+        raise ReplyFormatError("empty response")
+    try:
+        data = json.loads(content.strip().strip("`").removeprefix("json").strip())
+    except json.JSONDecodeError as exc:
+        raise ReplyFormatError(f"malformed JSON reply: {str(exc)[:120]}") from exc
+    if not isinstance(data, dict):
+        raise ReplyFormatError("reply is not a JSON object")
+    parts = []
+    for key, part, _ in v2_questions(config):
+        if not isinstance(data.get(key), bool):
+            raise ReplyFormatError(f"missing or non-boolean answer for {key}")
+        if data[key]:
+            parts.append(part)
+    try:
+        return _ModelReply(parts_detected=parts, certainty=data.get("certainty"),
+                           rationale=str(data.get("rationale", "")))
+    except ValidationError as exc:
+        raise ReplyFormatError(f"bad certainty: {str(exc)[:120]}") from exc
+
+
 def _message_content(response: Any) -> Any:
     message = getattr(response, "message", None)
     if message is None and isinstance(response, dict):
@@ -90,12 +113,19 @@ class GemmaInspector(InspectorABC):
         max_image_side: int | None = None,
         num_ctx: int | None = 2048,
         num_predict: int = 256,
+        crop: bool = False,
+        prompt_version: str = PROMPT_VERSION,
     ) -> None:
         if max_retries < 0:
             raise ValueError("max_retries must be >= 0")
+        if prompt_version not in PROMPT_VERSIONS:
+            raise ValueError(f"prompt_version must be one of {PROMPT_VERSIONS}")
         self.config, self.model = config, model
         self.keep_alive, self.max_retries = keep_alive, max_retries
         self.max_image_side = max_image_side
+        # VIS-10: crop to the assembly (found from the image's own pixels, never
+        # from labels) so the parts fill more of the model's input.
+        self.crop, self.prompt_version = crop, prompt_version
         self._client = client
         self._host, self._request_timeout_s = host, request_timeout_s
         # The same options are used for warm-up and for inspection; changing
@@ -162,9 +192,9 @@ class GemmaInspector(InspectorABC):
             self._finish("error", f"image not found: {path}")
             return failure_observation("error", self.last_detail)
 
-        message = {"role": "user", "content": build_prompt(self.config, step),
+        message = {"role": "user", "content": build_prompt(self.config, step, self.prompt_version),
                    "images": [self._image_payload(path)]}
-        schema = build_schema(self.config)
+        schema = build_schema(self.config, self.prompt_version)
         kind, detail = "error", ""
         for attempt in range(self.max_retries + 1):
             try:
@@ -173,7 +203,9 @@ class GemmaInspector(InspectorABC):
                 content = _message_content(response)
                 if isinstance(content, str):
                     self.last_raw_responses.append(content)
-                observation = self._to_observation(parse_reply(content), step)
+                reply = parse_reply_v2(content, self.config) if self.prompt_version == "v2" \
+                    else parse_reply(content)
+                observation = self._to_observation(reply, step)
             except ReplyFormatError as exc:
                 kind, detail = "parse_failure", str(exc)
             except Exception as exc:  # noqa: BLE001 - connection, timeout, OOM, ...
@@ -202,18 +234,49 @@ class GemmaInspector(InspectorABC):
         )
 
     def _image_payload(self, path: Path) -> str | bytes:
-        if not self.max_image_side:
+        if not self.max_image_side and not self.crop:
             return str(path)
         from PIL import Image
         with Image.open(path) as img:
             img = img.convert("RGB")
-            img.thumbnail((self.max_image_side, self.max_image_side))
+            if self.crop:
+                img = crop_to_assembly(img)
+            if self.max_image_side:
+                img.thumbnail((self.max_image_side, self.max_image_side))
             buffer = io.BytesIO()
             img.save(buffer, format="PNG")
         return buffer.getvalue()
 
     def _finish(self, status: str, detail: str) -> None:
         self.last_status, self.last_detail = status, detail
+
+
+def crop_to_assembly(img, min_side: int = 448):
+    """Square crop around the non-floor pixels, upscaled to at least ``min_side``.
+
+    Returns the image unchanged for an empty scene, so "nothing there" stays visible.
+    """
+    import numpy as np
+    from PIL import Image
+    if __package__ and __package__.startswith("src."):
+        from .cv_inspector import foreground_bbox
+    else:
+        from vision.cv_inspector import foreground_bbox
+    rgb = np.asarray(img)
+    box = foreground_bbox(np.ascontiguousarray(rgb[:, :, ::-1]))
+    if box is None:
+        return img
+    x0, y0, x1, y1 = box
+    side = max(x1 - x0, y1 - y0)
+    cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
+    left = max(0, min(cx - side // 2, img.width - side))
+    top = max(0, min(cy - side // 2, img.height - side))
+    cropped = img.crop((left, top, left + min(side, img.width), top + min(side, img.height)))
+    if max(cropped.size) < min_side:
+        scale = min_side / max(cropped.size)
+        cropped = cropped.resize((round(cropped.width * scale), round(cropped.height * scale)),
+                                 Image.LANCZOS)
+    return cropped
 
 
 def make_default_inspector(config: AssemblyConfig, **kwargs: Any) -> TimeoutInspector:

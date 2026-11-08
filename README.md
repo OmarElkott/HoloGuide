@@ -145,6 +145,28 @@ output paths, then generate the comparison report. No such factories or dataset
 are claimed to ship here. All failures remain in results; the runner relies on
 P2's bounded timeout implementation and does not create a competing timeout engine.
 
+### Partner 2 inspector factories
+
+The vision module now ships zero-argument factories in `src/vision/factories.py`
+(no `--step-id-interface` needed; all accept a StepSpec):
+
+| Factory | Inspector |
+|---|---|
+| `src.vision.factories:cv` | OpenCV colour masks + shape checks (no GPU, ~15 ms) |
+| `src.vision.factories:gemma` | Gemma 3 4B via local Ollama, wrapped in `ai_timeout_s` |
+| `src.vision.factories:hybrid` | OpenCV decides; Gemma only settles images OpenCV is unsure about |
+
+```powershell
+.venv/Scripts/python -m src.simulation.dataset --output outputs/dataset-v1
+.venv/Scripts/python -m src.evaluation.runner outputs/dataset-v1/labels.csv --inspector-factory src.vision.factories:hybrid --model gemma3:4b --endpoint http://localhost:11434 --output outputs/evaluation/hybrid-v1.csv
+.venv/Scripts/python -m src.vision.latency_benchmark outputs/dataset-v1/labels.csv --output outputs/benchmark/vis12 --inspectors cv,gemma,hybrid
+$env:HOLOGUIDE_BACKEND_FACTORY = 'src.simulation.backend:create_session'
+$env:HOLOGUIDE_INSPECTOR_FACTORY = 'src.vision.factories:hybrid'   # dashboard real mode
+```
+
+Measured results and the go/no-go choice are in `docs/decisions.md`; module details
+in `docs/VISION_MODULE.md`; the public notebook skeleton is `notebooks/hologuide_demo.ipynb`.
+
 See `docs/PERSON4_WRITEUP.md` for the writeup, task status, and submission checklist.
 
 ## Partner 1 rendered simulation contribution

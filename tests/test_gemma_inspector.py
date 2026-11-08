@@ -143,3 +143,63 @@ def test_image_downscale_sends_bytes(cfg, tmp_path):
     client = FakeClient(reply(["base_plate"]))
     GemmaInspector(cfg, client=client, max_image_side=256).inspect(path, 1)
     assert isinstance(client.calls[0]["messages"][0]["images"][0], bytes)
+
+
+# ---- VIS-10: crop to the assembly + prompt versions ---------------------------
+
+def test_crop_enlarges_the_assembly_and_keeps_empty_scenes(tmp_path):
+    from PIL import Image
+    from vision.gemma_inspector import crop_to_assembly
+    scene = Image.new("RGB", (640, 480), (220, 220, 220))
+    scene.paste((40, 70, 220), (290, 200, 350, 260))           # a small blue part
+    cropped = crop_to_assembly(scene)
+    assert cropped.width == cropped.height >= 448                # square, upscaled
+    import numpy as np
+    pixels = np.asarray(cropped)
+    blue = int(((pixels[..., 2] > 150) & (pixels[..., 0] < 120)).sum())
+    assert blue / pixels[..., 0].size > 3600 / (640 * 480)
+    empty = Image.new("RGB", (640, 480), (220, 220, 220))
+    assert crop_to_assembly(empty).size == (640, 480)
+
+
+def test_crop_sends_png_bytes_and_prompt_version_is_used(cfg, tmp_path):
+    from PIL import Image
+    path = tmp_path / "real.png"
+    Image.new("RGB", (640, 480), (220, 220, 220)).save(path)
+    client = FakeClient(reply(["base_plate"]))
+    inspector = GemmaInspector(cfg, client=client, crop=True, prompt_version="v2")
+    inspector.inspect(path, 1)
+    message = client.calls[0]["messages"][0]
+    assert isinstance(message["images"][0], bytes) and message["images"][0][:4] == b"\x89PNG"
+    from vision.prompts import build_prompt
+    assert message["content"] == build_prompt(cfg, cfg.step(1), "v2")
+
+
+def v2_reply(grey=False, orange=False, blue=False, green=False, red=False, certainty="clear"):
+    return json.dumps({"dark_grey_plate": grey, "orange_layer": orange, "blue_square": blue,
+                       "green_square": green, "red_pegs": red, "certainty": certainty,
+                       "rationale": "colours"})
+
+
+def test_v2_answers_map_to_parts_and_rules_decide(cfg, image):
+    client = FakeClient(v2_reply(grey=True, orange=True, green=True))
+    obs = GemmaInspector(cfg, client=client, prompt_version="v2").inspect(image, 3)
+    assert obs.parts_detected == ["base_plate", "gasket", "wrong_cover"]
+    assert obs.wrong_parts == ["wrong_cover"] and obs.missing_parts == ["cover"]
+    assert decide(cfg, obs, 3).status == DecisionStatus.BLOCK
+    empty = GemmaInspector(cfg, client=FakeClient(v2_reply()), prompt_version="v2").inspect(image, 1)
+    assert empty.parts_detected == [] and decide(cfg, empty, 1).status == DecisionStatus.BLOCK
+
+
+def test_v2_malformed_answer_retries_then_holds(cfg, image):
+    bad = json.dumps({"dark_grey_plate": "yes", "certainty": "clear", "rationale": ""})
+    client = FakeClient(bad, bad)
+    inspector = GemmaInspector(cfg, client=client, prompt_version="v2")
+    obs = inspector.inspect(image, 1)
+    assert len(client.calls) == 2 and inspector.last_status == "parse_failure"
+    assert is_failure(obs) and decide(cfg, obs, 1).status == DecisionStatus.HOLD
+
+
+def test_unknown_prompt_version_rejected_at_construction(cfg):
+    with pytest.raises(ValueError):
+        GemmaInspector(cfg, client=FakeClient(), prompt_version="v9")
