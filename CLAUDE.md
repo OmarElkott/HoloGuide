@@ -68,4 +68,3 @@ environment.render_to_file(path) -> PNG
 - Never let the AI advance the workflow; only the rules/workflow layer may do that.
 - Run the relevant pytest files before claiming a task is complete.
 - Do not commit generated files under `outputs/` or `runs/`.
-- Do not push directly to `main`; create a feature branch and pull request.
