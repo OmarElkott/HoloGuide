@@ -42,7 +42,7 @@ def test_streamlit_startup():
         assert not app.exception
     click('Place part')
     click('Inspect')
-    assert app.progress[0].value == 25
+    assert app.get('progress')[0].value == 25
     click('Inspect')
     submit = next(button for button in app.button if button.label == 'Submit override')
     assert submit.disabled
@@ -50,4 +50,4 @@ def test_streamlit_startup():
     app.text_input[1].set_value('fixture checked manually').run()
     app.checkbox[0].check().run()
     click('Submit override')
-    assert app.progress[0].value == 50
+    assert app.get('progress')[0].value == 50
