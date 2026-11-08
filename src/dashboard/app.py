@@ -6,8 +6,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import streamlit as st
-from src.dashboard.backends import load_factory
-from src.dashboard.demo import DemoController
+from src.dashboard.backends import load_factory, inspector_configuration
+from src.dashboard.demo import DemoController, RealDemoController
 from src.dashboard.presentation import STATE_BANNERS, camera_image, filter_audit
 from src.dashboard.session import DashboardSession
 
@@ -106,13 +106,13 @@ def play_demo():
     if st.button('Stop scripted demo', disabled=not demo.running):
         demo.stop()
     if demo.running:
-        with st.spinner(f'Running mock episode: {demo.stages[demo.index]}'):
+        with st.spinner(f'Running {getattr(demo, "mode", "mock")} episode: {demo.stages[demo.index]}'):
             demo.tick()
-    st.progress(demo.index / len(demo.stages), text='Scripted mock demonstration progress')
+    st.progress(demo.index / len(demo.stages), text='Scripted demonstration progress')
     if demo.error:
         st.error(demo.error)
     if demo.index == len(demo.stages):
-        st.success('Mock demonstration complete. Final real evaluation numbers remain unavailable.')
+        st.success('Scripted demonstration complete. Evaluation evidence is recorded separately.')
     for item in demo.history:
         with st.expander(item['stage']):
             st.code(item['detail'], language=None)
@@ -133,8 +133,9 @@ def main():
             if mode == 'Real':
                 factory = os.getenv('HOLOGUIDE_BACKEND_FACTORY')
                 if not factory:
-                    raise ValueError('Real backend unavailable: integrate the P1 environment and P2 inspector, '
-                                     'then configure HOLOGUIDE_BACKEND_FACTORY.')
+                    raise ValueError('Real backend unavailable: set HOLOGUIDE_BACKEND_FACTORY='
+                                     'src.simulation.backend:create_session and HOLOGUIDE_INSPECTOR_FACTORY='
+                                     'src.vision.factories:hybrid before starting real mode.')
                 replacement = load_factory(factory)
             else:
                 replacement = DashboardSession()
@@ -150,21 +151,35 @@ def main():
         st.warning('Mock operation — deterministic JSON scenes; not real AI performance.')
     else:
         st.info('Real operation — configured teammate backend')
-    st.caption(f'Inspector: {type(session.workflow.inspector).__name__}; '
-               f'model: {session.model or "not configured"}; endpoint: {session.endpoint or "none configured"}. '
-               'Network activity is not monitored. Localhost inference does not establish absence of other traffic.')
+    settings = inspector_configuration(session.workflow.inspector)
+    st.info(settings['connection'])
+    st.caption(f'Inspector: {settings["inspector"]}; model: {settings["model"] or "none"}; '
+               f'endpoint: {settings["endpoint"] or "none"}. '
+               'Network activity is not monitored. Wi-Fi-off rehearsal evidence remains separate.')
     if st.button('Run scripted mock demo'):
         if st.session_state.get('demo'):
             st.session_state.demo.close()
         st.session_state.demo = DemoController()
         st.rerun()
+    if st.button('Run scripted real demo', disabled=session.mode != 'real'):
+        factory_spec = os.getenv('HOLOGUIDE_BACKEND_FACTORY')
+        if not factory_spec:
+            st.error('Configure HOLOGUIDE_BACKEND_FACTORY for the real demo.')
+        else:
+            if st.session_state.get('demo'):
+                st.session_state.demo.close()
+            st.session_state.demo = RealDemoController(lambda: load_factory(factory_spec))
+            st.rerun()
     if st.session_state.get('demo'):
-        st.warning('Scripted MOCK episodes: normal, missing/wrong/order faults, correction, review, '
-                   'injected timeout, recovery, and a logged demonstration override. No real model timing.')
+        real = getattr(st.session_state.demo, 'mode', 'mock') == 'real'
+        st.warning(('REAL rendered inspection episodes. ' if real else 'MOCK episodes. ') +
+                   'Review confidence and timeout are deliberate presentation injections, followed by '
+                   'recovery and a logged demonstration override. Natural inspection failures stop the script.')
         play_demo()
     else:
-        from src.dashboard.scenario_launcher import show_launcher
-        show_launcher(st, session)
+        if session.mode == 'real':
+            from src.dashboard.scenario_launcher import show_launcher
+            show_launcher(st, session)
         runner = getattr(session, 'scenario_runner', None)
         show_session(session, controls=runner is None or runner.done)
 
