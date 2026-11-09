@@ -217,3 +217,20 @@ py -3.11 -m venv .venv
 Using the executable directly avoids PowerShell activation-policy problems. Installation and model provisioning require internet, but rendering and tests use local resources. Provision the chosen real model before disconnecting Wi-Fi. Do not download or pull a model during the offline demo. Follow the real-inspector factory instructions in the technical guide; the integrated factories are in src/vision/factories.py. The existing mock CLI remains available as `python -m src.control.cli --scenario missing_gasket` and is not AI inference.
 
 Roles: Partner 1 owns simulation, datasets, scenarios, recovery testing and demo preparation; Partner 2 owns vision/model inspection; Partner 3 owns rules, workflow and audit; Partner 4 owns dashboard and evaluation reporting. This contribution extends Partner 4's dashboard/evaluation seams and retains Partner 3's authorization logic.
+
+### Verified Partner 1 OpenCV route (no model download)
+
+```powershell
+$env:HOLOGUIDE_BACKEND_FACTORY = 'src.simulation.backend:create_session'
+$env:HOLOGUIDE_INSPECTOR_FACTORY = 'src.vision.factories:cv'
+.\.venv\Scripts\python.exe -m streamlit run src/dashboard/app.py --server.address 127.0.0.1 --browser.gatherUsageStats false
+```
+
+Select **Real**, start/reset the session, then use the scenario launcher or **Run scripted real demo**. Here “scripted” describes automated physical actions; OpenCV inspects the rendered images. Review/timeout demo stages are explicitly injected control tests. This route uses CPU computer vision, not Gemma. See [current P1 status](docs/PARTNER1_STATUS.md) and [measured results](docs/PARTNER1_TECHNICAL.md).
+
+```powershell
+.\.venv\Scripts\python.exe -m src.evaluation.recovery --output outputs/recovery-cv-new --inspector-factory src.vision.factories:cv --runs 20 --seed 2026 --evidence real-inspector
+.\.venv\Scripts\python.exe -m src.simulation.recovery_video outputs/recovery-cv-new --output outputs/recovery-cv-new.mp4
+```
+
+The MP4 is a captioned, silent replay of saved trial 0 for all four scenarios. It is supplementary evidence, not the narrated final screen recording. Source hashes and presentation timing are saved beside it. Output paths must be new.

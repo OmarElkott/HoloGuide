@@ -1,5 +1,3 @@
-> Integration update — 2026-11-06: This branch now includes current `main` (`866f7c0`), including Partner 2's Gemma inspector and Partner 4's dashboard. The integrated suite passed **166 tests in 13.79 seconds**. References below to an unavailable inspector describe the November 2 implementation stage; inspector source is now present, but real-model accuracy, recovery and GPU measurements are still pending. Generated artifacts remain excluded from Git. See `docs/VISION_MODULE.md` for the current vision interface.
-
 # Partner 1: simulation and evaluation setup
 
 HoloGuide renders a static assembly in PyBullet DIRECT mode with TinyRenderer. Four assembly steps add a grey base plate, orange gasket, blue cover and four red bolts. A green decoy is a wrong cover. The gasket is wider than the cover and the bolts sit outside its footprint, preserving visible evidence. Components are static bodies; this is an assembly inspection prototype, not a validated dynamics or manufacturing simulator.
@@ -24,19 +22,19 @@ V1 is a fixed-scene regression dataset: repetitions are intentional and do not c
 
 ## Scenario and recovery protocol
 
-`python -m src.simulation.runner --scenario missing_gasket --output outputs/scenario-001 --inspector-factory your_module:create_inspector`
+`python -m src.simulation.runner --scenario missing_gasket --output outputs/scenario-001 --inspector-factory src.vision.factories:cv`
 
-Replace `your_module:create_inspector` with Partner 2's installed factory. It takes no arguments and returns an inspector. The production workflow calls inspect(path, StepSpec). Add `--step-id-interface` for the roadmap inspect(path, step_id) contract. No inspector implementation is inferred or silently substituted.
+`src.vision.factories:cv` is Partner 2's installed OpenCV factory (no GPU or model server required). Use `src.vision.factories:gemma` or `:hybrid` only with a provisioned local model. It takes no arguments and returns an inspector. The production workflow calls inspect(path, StepSpec). Add `--step-id-interface` for the roadmap inspect(path, step_id) contract. No inspector implementation is inferred or silently substituted.
 
 The four scenarios use a fresh environment and workflow. Correct verifies each of four steps. Missing gasket verifies the base, physically places a premature cover, requires BLOCK, removes the cover, inserts the gasket and continues. Wrong cover verifies base and gasket, injects the decoy, requires BLOCK, replaces it and continues. Wrong order first checks the guard without invoking inspection, then explicitly injects the cover to test the visual path; after BLOCK it removes the cover and continues. These physical injections are deliberate test operations, logged separately from authorized placement. Fault cases stop on unexpected PASS, HOLD or Needs Review; they never force completion. Playback is bounded and advances one inspection per tick.
 
-`python -m src.evaluation.recovery --output outputs/recovery-real-001 --inspector-factory your_module:create_inspector --runs 20 --seed 50000 --evidence real-inspector`
+`python -m src.evaluation.recovery --output outputs/recovery-real-001 --inspector-factory src.vision.factories:cv --runs 20 --seed 50000 --evidence real-inspector`
 
 Run this only with the actual inspector. It produces 80 trials, including 20 correct controls and 20 of each fault. Recovery means an observed BLOCK followed by correction and PASS; completion is recorded separately. recovery_s measures from the blocking decision to the correction pass, including correction, rendering and inspection. It is not model-only latency. All attempts, failures, seeds, decisions and per-trial audits are retained. Evidence classification is a caller declaration: verify the factory and provenance before publishing any results.
 
 For image-level evaluation reuse Partner 4:
 
-`python -m src.evaluation.runner outputs/dataset-v2/labels.csv --output outputs/eval-real.csv --inspector-factory your_module:create_inspector`
+`python -m src.evaluation.runner outputs/dataset-v2/labels.csv --output outputs/eval-real.csv --inspector-factory src.vision.factories:cv`
 
 Without a real factory that command defaults to the existing JSON mock, which cannot inspect PNGs. Always specify the factory for these datasets.
 
@@ -46,7 +44,7 @@ In PowerShell:
 
 ```powershell
 $env:HOLOGUIDE_BACKEND_FACTORY = 'src.simulation.backend:create_session'
-$env:HOLOGUIDE_INSPECTOR_FACTORY = 'your_module:create_inspector'
+$env:HOLOGUIDE_INSPECTOR_FACTORY = 'src.vision.factories:cv'
 # Only if Partner 2 implements inspect(path, step_id):
 $env:HOLOGUIDE_STEP_ID_INTERFACE = '1'
 python -m streamlit run src/dashboard/app.py
@@ -58,13 +56,26 @@ Select Real and start/reset the session. Load a scenario before placing any part
 
 `env.offset_part('cover', 0.05, 0)` injects a misalignment without changing its identity; all bodies belonging to a component move together. This is a geometry capability, not an implemented vision alignment detector. Presence-only inspectors may pass it. Use it as a qualitative demo only until Partner 2 supplies alignment evidence and the team agrees on labels/rules. Existing configured colors, unobstructed gasket rim, external bolt positions and neutral workstation are preserved. Cosmetic text must remain outside inspection PNGs; the dashboard already labels steps and parts.
 
-## Limits and remaining validation
+## Measured OpenCV validation — November 8, 2026
 
-No Partner 2 real inspector is present in the inspected branches. Scripted test observations verify orchestration, rendering, stopping behavior and audit integration only. They do not establish AI accuracy, GPU latency, real recovery success or offline network behavior. Real-model evaluation, GUI rehearsal and physical recording remain pending. Real results must replace placeholders only after measured runs on the demo laptop. Never publish the scripted recovery CSV as competition performance.
+The integrated PR #4 head `575d5b09f5137285d23e9460145d7a32027ff8a6` passed 222 tests before the final documentation/video additions. Actual OpenCV inspection used `src.vision.factories:cv`, which wraps CVInspector in TimeoutInspector. No scripted observation inspector was used for these measurements.
 
-## Work before the real inspector arrives
+| Dataset | Images | Exact decision agreement | False blocks | Errors/timeouts | Median / p95 evaluation time |
+|---|---:|---:|---:|---:|---|
+| Fixed V1 | 200 | 200/200 | 0/80 | 0/0 | 11.01 / 12.71 ms |
+| Randomized V2 | 200 | 200/200 | 0/80 | 0/0 | 10.55 / 11.61 ms |
 
-Run `python -m src.simulation.rehearsal --output outputs/rehearsal-001` for an entirely local rendered rehearsal. It creates all four scenario episodes, audits, a JSON result file and a labeled animated GIF. Observations are prewritten test fixtures; neither image contents nor ground-truth labels are used for inference. This lets the team rehearse the flow without presenting a substitute as Partner 2's AI implementation.
+Each dataset has 80 correct and 40 of each fault category. These are existing synthetic regression datasets, not a newly held-out physical-camera benchmark. V1 includes repeated images. Latency covers inspection, validation and rules, excluding rendering and output writes. The results do not establish Gemma accuracy or GPU performance.
+
+Recovery used 20 trials per scenario with seeds 2026–2045 and randomized rendering. Correct completed 20/20; missing_gasket, wrong_cover and wrong_order each blocked, recovered and completed 20/20, with zero errors. Thus 80/80 assemblies completed and 60/60 fault trials recovered. Correct controls are not counted as recovery. Repeated randomized simulated trials do not establish generalization to real manufacturing.
+
+Raw CSVs, summaries, provenance, all trial PNGs and JSONL audits are in `outputs/nov8-verification/`, supplied separately because outputs are ignored by Git. The companion evidence archive includes the evaluated dataset images and labels. Keep that archive with any published results. P2's separate Gemma/Hybrid results have not been independently reproduced here. The local Ollama endpoint was unavailable; no model was downloaded.
+
+## Dashboard and recording acceptance
+
+The integrated live PyBullet/OpenCV demo controller passes automated tests, including the four scenarios and explicitly injected review/timeout stages. Visual browser acceptance remains pending: the computer-use browser permission blocked localhost access. This is not evidence of a dashboard failure. Wi-Fi-off rehearsal, microphone test and final narrated recording remain human acceptance steps.
+
+The earlier scripted rehearsal remains available via `python -m src.simulation.rehearsal --output outputs/rehearsal-new`. It is explicitly a test-double demonstration and must not be used for AI performance claims.
 
 Recovery trials now write each CSV row immediately and flush it to disk. Factory failures are retained as failed trials instead of aborting the entire run; provenance is written before trials begin and the final summary separates correct controls from fault recovery. A fresh inspector returned by the factory is owned by the trial and closed when it supports close().
 
@@ -84,3 +95,11 @@ The local Windows/Python 3.11.9 run measured 30 warm render-to-PNG samples at 64
 `python -m src.simulation.export_video outputs/rehearsal-001 --output outputs/rehearsal-new.mp4`
 
 The exporter uses installed OpenCV, embeds a permanent scripted-evidence label, refuses existing output files, and decodes every output frame to verify dimensions and count. The delivered silent MP4 has 570 frames at 20 fps, 960x720, duration 28.5 seconds. It is a rendered storyboard, not a desktop recording, final three-minute video or evidence of real AI performance.
+
+## Replay of measured recovery evidence
+
+```powershell
+python -m src.simulation.recovery_video outputs/nov8-verification/recovery-cv --output outputs/recovery-cv-trial0.mp4
+```
+
+This exports trial 0 of every scenario, retaining every saved decision (including failed trials if present). It verifies frame/decision counts, rejects inconsistent evidence declarations and refuses to overwrite outputs. Captions are added to the video only, never to inspection inputs. The sidecar records source/frame/video hashes and fixed presentation timing. Every encoded frame is decoded to verify the output. This is a silent replay of saved inspections, not live screen capture or measured inference speed. The evidence declaration is supplied by the trial producer; the exporter does not certify model identity.

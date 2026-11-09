@@ -1,48 +1,36 @@
-> Integration update — 2026-11-06: This branch now includes current `main` (`866f7c0`), including Partner 2's Gemma inspector and Partner 4's dashboard. The integrated suite passed **166 tests in 13.79 seconds**. References below to an unavailable inspector describe the November 2 implementation stage; inspector source is now present, but real-model accuracy, recovery and GPU measurements are still pending. Generated artifacts remain excluded from Git. See `docs/VISION_MODULE.md` for the current vision interface.
+# Partner 1 delivery status — November 8, 2026
 
-# Partner 1 delivery status
+This supersedes the November 2/6 status notes. Local finalization is based on PR #4 head `575d5b09f5137285d23e9460145d7a32027ff8a6`, which was an open, unmerged draft when inspected. No push, upload, merge or remote change was made during this finalization. The original repository, history and user edits are preserved in their existing location.
 
-Prepared 2026-11-02. No remote edits, pushes, pull requests, model downloads or submissions.
-
-## Integration provenance
-
-The isolated `partner1-completion` branch starts at the user's simulation commit `bc4b60ccb680d7de4a7b5fad4d6939e905d707ae` and merges Partner 4's `d7a246929dc5d0cc69e92a6a6c4202149b399bb2`, which includes main `17d8e25cfe72059ea0af723653d31a7dd8b4cdfe`. Original history and the original simulation branch are preserved; the contribution is now checked out locally on its own branch. No shared schema signature was changed. The existing workflow, rules, mock CLI, dashboard and evaluation framework remain in use.
-
-## Task accounting
-
-| Task | Delivered | Remaining / qualification |
+| Task | Delivered and verified | Qualification / remaining |
 |---|---|---|
-| SIM-06 | Generator, separate CSV labels, manifest compatibility, 200-image V1 and V2 | Real-inspector scoring pending |
-| SIM-04 | Four named scenario descriptions and fault/recovery behavior | Real-model validation pending |
-| SIM-07 | Bounded CLI/tick runner with audits and safe stops | Real-model validation pending |
-| SIM-05 | Seeded lighting, camera and component offset randomization | Validate robustness with P2 |
-| SIM-09 | Existing distinct palette and visible gasket/bolts retained; configurable camera, stable lighting | No claim of a redesigned scene |
-| SIM-10 | Local deterministic seeds/reset, DIRECT TinyRenderer, cached camera matrices | 30 local render-to-PNG samples measured: median 77.09 ms, p95 81.61 ms; cross-platform byte identity not promised |
-| DSH-08 | Real-session scenario launcher and backend factory | Actual inspector and manual GUI rehearsal needed |
-| EVL-03 | 20 trials per scenario; 80 rendered integration trials, CSV/audits | Scripted observations only; real 20-per-scenario evaluation not completed |
-| DOC-01 | Windows Python 3.11 setup, tests, run commands, offline note and roles | Fresh installation not attempted because downloads were not authorized |
-| DOC-02 | Architecture PNG | Delivered |
-| DOC-03c | Simulation/evaluation technical writeup | Real results must be added after measurement |
-| DOC-05a | Recording setup and 20-second check plan; GIF and verified 28.5-second silent MP4 storyboard | Actual screen/audio test clip requires PC interaction |
-| DOC-05b | Timed narration and shot list | Take 1 not recorded |
-| DOC-05c | Final/backup recording and verification plan | Final video, backup and upload not performed |
-| SIM-08 | Component offset fault with validation and tests | No alignment detector; qualitative only |
-| SIM-11 | Labeled preview and existing dashboard presentation | Optional table texture not implemented |
+| SIM-06 | Separate-label generator; 200-image V1 and V2; actual CV evaluation 400/400 correct decisions | Synthetic regression data, not independent physical-camera validation |
+| SIM-04 | Correct, missing gasket, wrong cover and wrong order | All exercised with real CV inspection |
+| SIM-07 | Bounded runner, fault injection, correction, audit, safe stops | Four scenarios each completed 20/20 |
+| SIM-05 | Seeded camera/light/offset variation | Randomized V2 and recovery exercised |
+| SIM-09 | Distinct palette, visible gasket/bolts, configurable camera/light | Existing geometry preserved |
+| SIM-10 | Deterministic reset and cached rendering | Earlier 30-frame benchmark: median 77.09 ms, p95 81.61 ms; same-stack byte equality only |
+| DSH-08 | Real-session scenario launcher and factory | Automated real CV integration passes; visual browser walkthrough blocked by local permission setting |
+| EVL-03 | Real CV 80 trials: 80 complete, 60/60 fault recovery, zero errors | Raw CSV, frames, audits and provenance supplied; Gemma/Hybrid not measured here |
+| DOC-01 | Windows Python 3.11 installation/run guide and roles | Fresh download/install and second-machine check not performed |
+| DOC-02 | Architecture PNG and trust-boundary explanation | Delivered |
+| DOC-03c | Simulation/evaluation writeup with dated real CV results | Delivered; all-model final comparison belongs to team evaluation |
+| DOC-05a | Recording plan, silent scripted storyboard and real CV saved-trial replay | Actual microphone/screen test clip still required |
+| DOC-05b | Three-minute narration and shot list | User/team must record narrated take 1 |
+| DOC-05c | Final/backup naming, review and handoff procedure | Final narrated recording, backup and approved upload remain |
+| SIM-08 | Validated component offset fault capability | Qualitative only; no alignment detector claimed |
+| SIM-11 | Presentation captions, scenario/decision labels on video outside inspection frames | Optional table texture intentionally deferred to preserve calibrated vision inputs |
 
-## Evidence
+## Evidence and integration
 
-The merged baseline passed 114 tests. Final suite: 134 passed in 12.39 seconds, including a Streamlit AppTest of the rendered wrong-cover launcher. Results are recorded in the accompanying test-results.txt. The generated datasets each have 200 actual PyBullet PNGs. Scripted integration recovery trials completed 80/80 assemblies with 60/60 expected fault block/correct/pass sequences. These are test-double results, not model accuracy or real recovery measurements. The correct controls are reported separately from fault recovery.
+The unmodified PR head passed 222 tests, including the real CV demo controller and 500-sequence workflow invariant test. See FINAL_PARTNER1_REPORT.md for the final suite after local additions. This clears the missing-PyBullet problem reported on the teammate's machine for this laptop only.
 
-## What must happen next
+`outputs/nov8-verification/` contains actual CV dataset results and recovery artifacts. These replace scripted evidence for the CV recovery claim; the earlier scripted artifacts retain their test-double labels. Do not attribute these measurements to Gemma. No model server was available on localhost:11434 when checked.
 
-Provide Partner 2's inspector module and factory, or identify its local checkout. The inspected repository branches contain only vision schemas, not Gemma/OpenCV/Hybrid implementations. Once available, run the documented real image evaluation and recovery commands; preserve failures and publish the measured numbers. No additional inspector was invented to stand in for the teammate's work.
+## Remaining actions requiring the user/team
 
-On the demo PC, verify the real dashboard, perform the Wi-Fi-off rehearsal, record and review the audio test and final/backup video. GPU measurements and offline-network claims remain unverified. Any dependency/model download, push, PR creation, upload or Kaggle action still requires explicit permission.
-
-## Local handoff
-
-The source ZIP is a ready-to-inspect integrated snapshot. The Git bundle includes the complete local completion branch and preserves its ancestors. Clone the bundle locally into a new directory to retain history; do not overwrite an existing checkout. Generated images and trial outputs are supplied separately and remain ignored by Git. Review the integration with teammates before any remote merge. No user branch was force-updated.
-
-The contribution is now installed in C:\Users\muaad\HoloGuide on partner1-completion, and VS Code was launched for that folder. The original simulation branch remains unchanged. An offline four-scenario rehearsal was executed successfully using explicitly scripted observations; see outputs/rehearsal-001.
-
-Playable storyboard: outputs/HoloGuide-scripted-rehearsal-v2.mp4 (scripted observations, no audio). Decoder verified all 570 frames; first-frame visual inspection passed. New benchmark/export tests are in tests/test_partner1_deliverables.py. The unsaved VS Code test_simulation.py tab was not saved, closed or modified; test results cover disk contents only.
+1. Allow the computer-use browser to access localhost:8502, or open the running dashboard manually. Select Real, start/reset, run the real scripted demo and inspect visible frames, fault corrections and audit history.
+2. Provision/run the team's approved local model before Gemma/Hybrid acceptance. Downloads require permission; do not download during the demo.
+3. Perform the genuine disconnected-network rehearsal and record its checklist. No offline-network claim is made from local endpoint configuration alone.
+4. Record and listen to the microphone/screen test, then the narrated final and backup. A silent evidence replay does not satisfy these tasks.
+5. Review local changes and PR #4 together before authorizing any push/upload. P3 review, owner branch protection, P2 model evidence and final team submission remain team responsibilities.

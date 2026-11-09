@@ -35,3 +35,13 @@ Do not read invented accuracy numbers. If real evaluation is unfinished, say “
 The physical microphone check, recorder operation, Wi-Fi-off rehearsal, final GPU/model demonstration, second-device playback and final recording require the user's PC interaction. No final video is claimed to exist.
 
 A playable silent storyboard is now available at outputs/HoloGuide-scripted-rehearsal-v2.mp4. It covers all four rendered episodes in 28.5 seconds with a permanent scripted-observation label. This supplements the GIF; neither is the required narrated screen recording.
+
+## November 8 evidence and exact handoff
+
+For the readily runnable local demonstration choose `src.vision.factories:cv` and identify it on camera as OpenCV, not Gemma. The measured regression results are 400/400 correct decisions on existing synthetic V1/V2 images; recovery completed 80/80 trials, with 60/60 fault recoveries. Cite the raw evidence archive and do not generalize these results to a physical camera or Gemma.
+
+A new silent replay can be made with `python -m src.simulation.recovery_video outputs/nov8-verification/recovery-cv --output outputs/recovery-cv-trial0.mp4`. It presents trial 0 for each scenario, never silently selecting only successful frames. The sidecar declares fixed presentation timing and hashes. This is a useful recording insert, not a microphone test or screen recording.
+
+For the 20-second microphone test, say: “HoloGuide uses an RGB image to inspect an assembly. OpenCV reports visible parts; our rules decide whether to proceed. These labels are added to the presentation, not supplied to the inspector.” Play the actual file back, verify audible narration and legible dashboard text, and record its filename and pass/fail in the final report. Then follow the timed script above for take 1, final and backup.
+
+Browser automation could not open localhost because of a saved access permission. Manual visible acceptance and genuine Wi-Fi-off rehearsal therefore remain pending. Do not present the automated controller test as proof of those checks. No recording software or model was installed during this finalization.
