@@ -8,11 +8,15 @@ import pytest
 from src.config import load_config
 from src.control.audit_log import AuditLog
 from src.control.cli import (
+    DEFAULT_REAL_INSPECTOR_FACTORY,
     MockAssemblyEnvironment,
     MockInspector,
     run_mock_scenario,
+    run_real_scenario,
 )
 from src.control.workflow import InvalidTransition, Workflow, WorkflowState
+from src.vision.cv_inspector import CVInspector
+from src.vision.inspector import TimeoutInspector
 from src.vision.schemas import DecidedBy, DecisionStatus, Observation
 
 
@@ -223,7 +227,8 @@ def test_module_cli_entrypoint_runs_without_live_dependencies(tmp_path):
     assert "Outcome: COMPLETE" in completed.stdout
 
 
-def test_real_mode_fails_safe_when_dependencies_are_unavailable(tmp_path):
+def test_real_mode_subprocess_uses_pybullet_and_opencv(tmp_path):
+    pytest.importorskip("pybullet")
     completed = subprocess.run(
         [
             sys.executable,
@@ -234,7 +239,114 @@ def test_real_mode_fails_safe_when_dependencies_are_unavailable(tmp_path):
             "--mode",
             "real",
             "--audit-path",
-            str(tmp_path / "unused.jsonl"),
+            str(tmp_path / "real-audit.jsonl"),
+            "--frames-dir",
+            str(tmp_path / "real-frames"),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert f"inspector factory {DEFAULT_REAL_INSPECTOR_FACTORY}" in completed.stdout
+    assert "Mode: REAL" in completed.stdout
+    assert "Outcome: COMPLETE" in completed.stdout
+    assert len(list((tmp_path / "real-frames").glob("*.png"))) == 4
+
+
+@pytest.mark.parametrize(
+    ("scenario", "decisions", "recovered", "guard_blocked"),
+    [
+        ("correct", ["pass"] * 4, False, False),
+        ("missing_gasket", ["pass", "block", "pass", "pass", "pass"], True, False),
+        ("wrong_cover", ["pass", "pass", "block", "pass", "pass"], True, False),
+        ("wrong_order", ["block", "pass", "pass", "pass", "pass"], True, True),
+    ],
+)
+def test_real_adapter_runs_rendered_scenarios_with_genuine_inspector(
+    tmp_path,
+    scenario,
+    decisions,
+    recovered,
+    guard_blocked,
+):
+    pytest.importorskip("pybullet")
+    audit = AuditLog(tmp_path / f"{scenario}.jsonl")
+    output = StringIO()
+    result = run_real_scenario(
+        scenario,
+        audit=audit,
+        frames_dir=tmp_path / f"{scenario}-frames",
+        output=output,
+    )
+
+    assert result.completed
+    assert result.workflow.state is WorkflowState.COMPLETE
+    assert result.workflow.current_step_id == 4
+    assert isinstance(result.inspector, TimeoutInspector)
+    assert isinstance(result.inspector.inner, CVInspector)
+    assert result.run_result.decisions == decisions
+    assert result.run_result.recovered is recovered
+    assert result.run_result.guard_blocked is guard_blocked
+    assert "[MODE] REAL" in output.getvalue()
+    assert "Outcome: COMPLETE" in output.getvalue()
+
+    events = audit.read_all()
+    event_types = [event["event_type"] for event in events]
+    assert event_types[0] == "scenario_started"
+    assert event_types[-1] == "scenario_completed"
+    assert "assembly_completed" in event_types
+    if scenario != "correct":
+        assert "inspection_blocked" in event_types
+        assert "scenario_correction_started" in event_types
+    if scenario == "wrong_order":
+        assert event_types.index("action_rejected") < event_types.index(
+            "inspection_requested"
+        )
+
+
+def test_real_adapter_inspection_failure_holds_without_advancement(tmp_path):
+    pytest.importorskip("pybullet")
+    audit = AuditLog(tmp_path / "failure.jsonl")
+    result = run_real_scenario(
+        "correct",
+        inspector=FailingMockInspector(),
+        audit=audit,
+        frames_dir=tmp_path / "failure-frames",
+        output=StringIO(),
+    )
+
+    assert not result.completed
+    assert result.workflow.state is WorkflowState.HOLD
+    assert result.workflow.current_step_id == 1
+    assert result.run_result.decisions == ["hold"]
+    assert result.run_result.error == (
+        "RuntimeError: Inspection returned hold; human review required"
+    )
+    event_types = [event["event_type"] for event in audit.read_all()]
+    assert event_types == [
+        "scenario_started",
+        "action_accepted",
+        "inspection_requested",
+        "inspection_hold",
+        "scenario_stopped",
+    ]
+
+
+def test_cli_invalid_scenario_fails_without_creating_audit(tmp_path):
+    audit_path = tmp_path / "invalid.jsonl"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "src.control.cli",
+            "--scenario",
+            "not-a-scenario",
+            "--mode",
+            "real",
+            "--audit-path",
+            str(audit_path),
         ],
         cwd=Path(__file__).resolve().parents[1],
         capture_output=True,
@@ -242,4 +354,5 @@ def test_real_mode_fails_safe_when_dependencies_are_unavailable(tmp_path):
         check=False,
     )
     assert completed.returncode == 2
-    assert "Real mode is unavailable" in completed.stderr
+    assert "invalid choice" in completed.stderr
+    assert not audit_path.exists()

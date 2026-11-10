@@ -1,20 +1,20 @@
-"""Runnable end-to-end command-line demonstration for HoloGuide control.
+"""Runnable end-to-end command-line entry point for HoloGuide control.
 
-The repository currently ships no real simulation or inspector implementation,
-so the default mode is an explicitly labelled deterministic mock. The mock writes
-JSON scene snapshots rather than camera images and makes no model-accuracy or
-latency claims. All authorization still goes through the production Workflow.
+Mock mode writes labelled JSON fixtures and makes no AI or simulation claims.
+Real mode delegates rendered scenario playback to ``simulation.runner`` using
+PyBullet and an installed vision factory (OpenCV by default). Both modes keep
+authorization in the production :class:`Workflow`.
 """
 
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, TextIO
+from uuid import uuid4
 
 if __package__ and __package__.startswith("src."):
     from ..config import AssemblyConfig, DEFAULT_CONFIG_PATH, StepSpec, load_config
@@ -29,6 +29,7 @@ else:
 
 
 SCENARIOS = ("correct", "missing_gasket", "wrong_cover", "wrong_order")
+DEFAULT_REAL_INSPECTOR_FACTORY = "src.vision.factories:cv"
 
 
 class ScenarioConfigurationError(RuntimeError):
@@ -113,6 +114,25 @@ class ScenarioResult:
     @property
     def completed(self) -> bool:
         return self.workflow.state is WorkflowState.COMPLETE
+
+
+@dataclass
+class RealScenarioExecution:
+    """Result of the thin control-CLI adapter around ``ScenarioRunner``."""
+
+    scenario: str
+    workflow: Workflow
+    inspector: Inspector
+    run_result: Any
+    frames_dir: Path
+
+    @property
+    def completed(self) -> bool:
+        return (
+            bool(self.run_result.completed)
+            and self.run_result.error is None
+            and self.workflow.state is WorkflowState.COMPLETE
+        )
 
 
 def run_mock_scenario(
@@ -279,6 +299,88 @@ def run_mock_scenario(
     return result
 
 
+def run_real_scenario(
+    scenario: str,
+    *,
+    config: AssemblyConfig | None = None,
+    inspector: Inspector | None = None,
+    inspector_factory: str = DEFAULT_REAL_INSPECTOR_FACTORY,
+    step_id_interface: bool = False,
+    audit: AuditLog | None = None,
+    frames_dir: Path | str | None = None,
+    output: TextIO | None = None,
+    retry_limit: int = 3,
+    seed: int = 0,
+) -> RealScenarioExecution:
+    """Run a rendered scenario through the existing simulator integration.
+
+    Imports are deliberately lazy so mock mode remains usable on machines that
+    do not have PyBullet or OpenCV installed. ``ScenarioRunner`` owns scenario
+    orchestration; this adapter only supplies production dependencies and output.
+    """
+    if scenario not in SCENARIOS:
+        raise ValueError(f"unknown scenario '{scenario}'")
+    output = output if output is not None else sys.stdout
+    config = config if config is not None else load_config()
+    audit = audit if audit is not None else AuditLog()
+    frames_path = (
+        Path(frames_dir)
+        if frames_dir is not None
+        else _default_real_frames_dir(scenario)
+    )
+
+    # Importing runner also imports the real PyBullet environment. Keeping this
+    # here prevents an optional real dependency from breaking explicit mock use.
+    from src.simulation.assembly_env import AssemblyEnv
+    from src.simulation.runner import ScenarioRunner
+
+    if inspector is None:
+        inspector = _load_real_inspector(
+            inspector_factory,
+            config,
+            step_id_interface=step_id_interface,
+        )
+    if not callable(getattr(inspector, "inspect", None)):
+        raise TypeError("inspector factory did not return an object with inspect()")
+
+    print(
+        "[MODE] REAL - PyBullet rendered PNGs with inspector factory "
+        f"{inspector_factory}.",
+        file=output,
+    )
+    print(f"[SCENARIO] {scenario}", file=output)
+    print(f"[FRAMES] {frames_path}", file=output)
+
+    workflow = Workflow(config, inspector, audit, retry_limit=retry_limit)
+    with AssemblyEnv(config, seed=seed) as environment:
+        runner = ScenarioRunner(
+            scenario,
+            environment,
+            workflow,
+            frames_path,
+        )
+        run_result = runner.run()
+
+    execution = RealScenarioExecution(
+        scenario=scenario,
+        workflow=workflow,
+        inspector=inspector,
+        run_result=run_result,
+        frames_dir=frames_path,
+    )
+    if not execution.completed:
+        audit.record(
+            "scenario_stopped",
+            scenario=scenario,
+            mode="real",
+            final_state=workflow.state,
+            current_step=workflow.current_step,
+            reason=run_result.error or "scenario did not reach COMPLETE",
+        )
+    _print_real_summary(execution, output)
+    return execution
+
+
 def _inspect(
     result: ScenarioResult,
     audit: AuditLog,
@@ -373,9 +475,42 @@ def _wrong_cover_parts(config: AssemblyConfig) -> tuple[str, str]:
     return decoy.name, candidate
 
 
-def _real_integration_missing() -> list[str]:
-    required_modules = ("src.simulation.scene", "src.vision.inspector")
-    return [name for name in required_modules if importlib.util.find_spec(name) is None]
+def _default_real_frames_dir(scenario: str) -> Path:
+    """Choose a collision-resistant directory because ScenarioRunner is exclusive."""
+    return Path("outputs/real_runs") / f"{scenario}-{uuid4().hex[:12]}" / "frames"
+
+
+def _load_real_inspector(
+    spec: str,
+    config: AssemblyConfig,
+    *,
+    step_id_interface: bool,
+) -> Inspector:
+    """Load a genuine vision inspector while honoring a custom assembly config."""
+    if spec == DEFAULT_REAL_INSPECTOR_FACTORY and not step_id_interface:
+        from src.vision.factories import cv
+
+        return cv(config)
+
+    from src.simulation.runner import load_inspector
+
+    return load_inspector(spec, step_id_interface)
+
+
+def _print_real_summary(result: RealScenarioExecution, output: TextIO) -> None:
+    outcome = "COMPLETE" if result.completed else "SAFE STOP"
+    print("\n=== HoloGuide scenario summary ===", file=output)
+    print(f"Scenario: {result.scenario}", file=output)
+    print("Mode: REAL (PyBullet rendering and configured inspector)", file=output)
+    print(f"Outcome: {outcome}", file=output)
+    print(f"Workflow state: {result.workflow.state.value}", file=output)
+    print(f"Current step: {result.workflow.current_step_id}", file=output)
+    print(f"Decisions: {', '.join(result.run_result.decisions) or 'none'}", file=output)
+    print(f"Guard blocked premature action: {result.run_result.guard_blocked}", file=output)
+    print(f"Recovered from injected fault: {result.run_result.recovered}", file=output)
+    print(f"Frames: {result.frames_dir}", file=output)
+    if result.run_result.error:
+        print(f"Failure: {result.run_result.error}", file=output)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -387,7 +522,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--mode",
         choices=("mock", "real"),
         default="mock",
-        help="mock is deterministic and requires no simulator or AI (default)",
+        help=(
+            "mock uses deterministic JSON fixtures (default); real uses PyBullet "
+            "rendering and a configured vision inspector"
+        ),
     )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
     parser.add_argument(
@@ -398,45 +536,64 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--frames-dir",
         type=Path,
-        default=Path("outputs/mock_frames"),
+        default=None,
+        help=(
+            "frame directory; mock defaults to outputs/mock_frames, real defaults "
+            "to a unique directory under outputs/real_runs"
+        ),
     )
     parser.add_argument("--retry-limit", type=int, default=3)
+    parser.add_argument(
+        "--inspector-factory",
+        default=DEFAULT_REAL_INSPECTOR_FACTORY,
+        help=(
+            "real-mode module:function factory (default: "
+            f"{DEFAULT_REAL_INSPECTOR_FACTORY})"
+        ),
+    )
+    parser.add_argument(
+        "--step-id-interface",
+        action="store_true",
+        help="adapt a custom real inspector that expects an integer step id",
+    )
+    parser.add_argument("--seed", type=int, default=0, help="real simulator seed")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.mode == "real":
-        missing = _real_integration_missing()
-        if missing:
-            print(
-                "[ERROR] Real mode is unavailable. Missing compatible modules: "
-                + ", ".join(missing),
-                file=sys.stderr,
-            )
-            print(
-                "Use --mode mock for the explicit deterministic demonstration.",
-                file=sys.stderr,
-            )
-            return 2
-        print(
-            "[ERROR] Real modules were found, but no agreed adapter contract exists yet; "
-            "refusing to guess simulator or inspector interfaces.",
-            file=sys.stderr,
-        )
-        return 2
-
     try:
         config = load_config(args.config)
+        audit = AuditLog(args.audit_path)
+        if args.mode == "real":
+            result = run_real_scenario(
+                args.scenario,
+                config=config,
+                inspector_factory=args.inspector_factory,
+                step_id_interface=args.step_id_interface,
+                audit=audit,
+                frames_dir=args.frames_dir,
+                retry_limit=args.retry_limit,
+                seed=args.seed,
+            )
+            return 0 if result.completed else 1
+
         result = run_mock_scenario(
             args.scenario,
             config=config,
-            audit=AuditLog(args.audit_path),
-            frames_dir=args.frames_dir,
+            audit=audit,
+            frames_dir=args.frames_dir or Path("outputs/mock_frames"),
             retry_limit=args.retry_limit,
         )
         return 0 if result.completed else 1
-    except (AuditLogError, OSError, ValueError, ScenarioConfigurationError) as exc:
+    except (
+        AuditLogError,
+        ImportError,
+        OSError,
+        TypeError,
+        ValueError,
+        ScenarioConfigurationError,
+    ) as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)
         return 2
 
