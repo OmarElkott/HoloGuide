@@ -1,6 +1,29 @@
 # HoloGuide — Control Module Progress & Handoff
 
 **Area:** Partner 3 — Control: workflow, rules, override, audit  
+> [!IMPORTANT]
+> **Historical document:** The checklist below is the October 28, 2026 pre-verification handoff and is
+> retained only for provenance. It is not the current implementation status. See
+> [`docs/FINAL_PARTNER3_REPORT.md`](docs/FINAL_PARTNER3_REPORT.md) for the verified architecture,
+> task-by-task completion table, commands, test results, real PyBullet/OpenCV scenario evidence,
+> limitations, and remaining optional work.
+
+## Current verified summary (November 9, 2026)
+
+- Prior real-control-CLI repair merged through PR #5; verified code baseline:
+  `5c925cda5f3d1f3ef083122cedd7e15b70749fa3`.
+- Targeted control verification: **93 passed, 0 failed, 0 skipped**.
+- Complete repository verification: **219 passed, 0 failed, 0 skipped**.
+- Real PyBullet + OpenCV CLI runs for `correct`, `missing_gasket`, `wrong_cover`, and
+  `wrong_order` all reached COMPLETE. Fault scenarios produced BLOCK before correction/reinspection;
+  wrong order was rejected by the guard before inspection.
+- Mandatory control tasks are implemented. Optional `CTL-12` (`py_trees` view) and `CTL-13`
+  (audit CSV export) remain future work.
+- Ollama was unavailable during final Partner 3 verification, so no Gemma run is claimed.
+
+Everything after this summary describes the earlier planning state and intentionally retains its unchecked
+boxes. Do not use those boxes as current completion evidence.
+
 **Working branch:** `feat/control`  
 **Last updated:** October 28, 2026  
 **Status:** Four planned Codex implementation phases requested; local code and test results **not independently verified in this document**.
