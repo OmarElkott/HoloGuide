@@ -21,7 +21,7 @@ def collect(manifest, config, inspector, prepared, *, model=None, endpoint=None)
                             'status', '--porcelain'], cwd=root, text=True,
                            capture_output=True, check=False)
     packages = {}
-    for package in ('pydantic', 'pyyaml', 'ollama', 'opencv-python', 'numpy'):
+    for package in ('pydantic', 'pyyaml', 'ollama', 'opencv-python', 'numpy', 'pybullet', 'pillow'):
         try:
             packages[package] = importlib.metadata.version(package)
         except importlib.metadata.PackageNotFoundError:
@@ -29,13 +29,27 @@ def collect(manifest, config, inspector, prepared, *, model=None, endpoint=None)
     return {
         'recorded_at_utc': datetime.now(timezone.utc).isoformat(),
         'manifest_path': str(Path(manifest).resolve()), 'manifest_sha256': sha256(manifest),
+        'dataset_metadata': json_metadata(Path(manifest).parent / 'dataset.json'),
         'images': [{'path': str(path), 'sha256': sha256(path)} for _, path, _ in prepared],
         'configuration': config.model_dump(mode='json'),
         'inspector': f'{type(inspector).__module__}.{type(inspector).__qualname__}',
         'model': model, 'endpoint': endpoint,
+        'effective_inspector': _effective(inspector),
         'code_revision': revision.stdout.strip() if revision.returncode == 0 else None,
         'working_tree_dirty': bool(dirty.stdout.strip()) if dirty.returncode == 0 else None,
         'python': sys.version, 'platform': platform.platform(), 'packages': packages,
         'hardware': 'Not measured: record demo laptop CPU/GPU and Ollama model digest separately',
         'measurement_interval': 'inspect + Observation validation + deterministic rule evaluation; excludes image rendering and file writes',
     }
+
+
+def _effective(inspector):
+    from src.dashboard.backends import inspector_configuration
+    return inspector_configuration(inspector)
+
+
+def json_metadata(path):
+    import json
+    if not path.exists():
+        return None
+    return {'sha256': sha256(path), 'contents': json.loads(path.read_text(encoding='utf-8'))}

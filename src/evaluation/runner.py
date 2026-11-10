@@ -1,7 +1,7 @@
 """Run an existing Inspector over an explicit CSV manifest, without label leakage.
 
-No dataset ships with this checkout. The provisional manifest adapter is documented
-in README; it does not assert a shared dataset contract.
+The manifest contract is supplied by src.simulation.dataset; labels never reach
+the inspector. Returned P2 failure/timeout markers are retained as evidence.
 """
 import argparse
 import csv
@@ -17,10 +17,11 @@ from src.vision.schemas import DecisionStatus, Observation
 from src.evaluation.metrics import (
     accuracy_by_mistake_type, false_block_rate, latency_statistics,
 )
-from src.evaluation.provenance import collect
+from src.evaluation.provenance import collect, sha256
+from src.evaluation.diagnostics import counters, outcome
 
 FIELDS = ['image_path', 'step_id', 'mistake_type', 'expected_status', 'status',
-          'confidence', 'latency_s', 'message', 'rationale', 'error', 'inspector', 'timed_out']
+          'confidence', 'latency_s', 'message', 'rationale', 'error', 'inspector', 'timed_out', 'inspector_status']
 
 
 def run(manifest, inspector, config, output, *, model=None, endpoint=None):
@@ -55,7 +56,14 @@ def run(manifest, inspector, config, output, *, model=None, endpoint=None):
         image = (manifest.parent / case['image_path']).resolve()
         if not image.is_file():
             raise FileNotFoundError(image)
+        if case.get('sha256') and case['sha256'] != sha256(image):
+            raise ValueError(f'Dataset image checksum mismatch: {image.name}')
         prepared.append((case, image, config.step(step_id)))
+    metadata_path = manifest.parent / 'dataset.json'
+    if metadata_path.exists():
+        metadata = json.loads(metadata_path.read_text(encoding='utf-8'))
+        if metadata.get('config') != config.model_dump(mode='json'):
+            raise ValueError('Dataset configuration does not match evaluation configuration')
     rows = []
     provenance = collect(manifest, config, inspector, prepared, model=model, endpoint=endpoint)
     for case, image, step in prepared:
@@ -63,8 +71,11 @@ def run(manifest, inspector, config, output, *, model=None, endpoint=None):
         error = ''
         observation = None
         timed_out = False
+        inspector_status = ''
+        before = counters(inspector)
         try:
             observation = Observation.model_validate(inspector.inspect(image, step))
+            timed_out, error, inspector_status = outcome(observation, before)
             decision = evaluate(observation, step, config.confidence_threshold,
                                 context=RuleContext.from_config(config, step))
             status, message = decision.status.value, decision.message
@@ -82,6 +93,7 @@ def run(manifest, inspector, config, output, *, model=None, endpoint=None):
             'rationale': observation.rationale if observation else '',
             'error': error, 'inspector': type(inspector).__name__,
             'timed_out': timed_out,
+            'inspector_status': inspector_status,
         })
     summary = {
         'inspector': type(inspector).__name__,

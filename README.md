@@ -1,4 +1,4 @@
-> Integration update — 2026-11-06: This branch now includes current `main` (`866f7c0`), including Partner 2's Gemma inspector and Partner 4's dashboard. The integrated suite passed **166 tests in 13.79 seconds**. References below to an unavailable inspector describe the November 2 implementation stage; inspector source is now present, but real-model accuracy, recovery and GPU measurements are still pending. Generated artifacts remain excluded from Git. See `docs/VISION_MODULE.md` for the current vision interface.
+> P4 verification update (2026-11-08): simulation and real inspectors are integrated; P2 laptop results are recorded in docs/decisions.md. See docs/PERSON4_WRITEUP.md for current evidence and outstanding acceptance. No offline rehearsal is claimed.
 
 # HoloGuide
 A locally powered AI assembly system that verifies manufacturing steps and catches defects
@@ -64,13 +64,28 @@ and reset releases resources. This is not a real-model timeout benchmark or the
 final three-minute hardware rehearsal. The scenario transcripts retain the
 mistakes, correction messages, reinspection and completion events.
 
-Real mode requires the teammate implementations; it never falls back to mocks.
-P1's unmerged `feat/sim-assembly-env` currently supplies `render_to_file(path)` and
-`close()`, but `place_part`/`remove_part` are still placeholders. No P2 inspector
-is merged. After those dependencies are ready, configure
-`HOLOGUIDE_BACKEND_FACTORY=your_team_module:create_dashboard_session`. That factory
-must return `DashboardSession(mode='real', environment=env, inspector=inspector,
-model=actual_model_name, endpoint=actual_endpoint)`. The dashboard consumes
+Real simulation, scenarios, dataset generation and OpenCV/Gemma/Hybrid inspectors
+are now integrated on main. Configure the existing backend in PowerShell:
+
+```powershell
+$env:HOLOGUIDE_BACKEND_FACTORY = 'src.simulation.backend:create_session'
+$env:HOLOGUIDE_INSPECTOR_FACTORY = 'src.vision.factories:hybrid'
+$env:HOLOGUIDE_MODEL_NAME = 'gemma3:4b'
+$env:HOLOGUIDE_MODEL_ENDPOINT = 'http://localhost:11434'
+.venv/Scripts/python -m streamlit run src/dashboard/app.py
+```
+
+Select Real, then Start selected mode. `Run scripted real demo` starts existing
+rendered scenarios for normal, missing/wrong/order faults and corrections, then
+explicitly injected review/timeout, HOLD recovery, reinspection and a logged
+demonstration override. Camera, decisions, audit and progress update each tick.
+Stop halts between synchronous calls; reset closes resources. Unexpected real
+decisions stop the script. No mock fallback is used. Injected confidence/timeout
+events are not observed model failures. Mock mode remains separately selectable.
+The indicator reads actual P2 objects, including nested Hybrid model defaults;
+loopback configuration is not offline evidence. See `docs/PERSON4_OFFLINE_CHECKLIST.md`.
+
+The backend creates DashboardSession with a real environment and inspector. It consumes
 `render_to_file(path)`, `place_part`, `remove_part`, and `close` only; it never calls
 `parts_present()` or passes simulation truth to inspection. The actual control
 contract is `inspect(path, StepSpec)`. If P2 implements the roadmap's step-ID
@@ -82,9 +97,8 @@ is not guaranteed. Use reset before leaving a real session.
 
 ## Evaluation
 
-No labelled evaluation dataset or real Inspector ships in this checkout.
-Do not treat mock test outcomes as model performance. Until the dataset owner
-supplies its manifest contract, the runner supports this **provisional adapter**:
+`src.simulation.dataset` generates PNGs and separate labels matching this runner
+contract. Extra seed/parts/hash fields never reach inspection:
 
 ```csv
 image_path,step_id,mistake_type,expected_status
@@ -93,7 +107,7 @@ image_path,step_id,mistake_type,expected_status
 Paths are relative to the manifest; step IDs reference `config/assembly.yaml`.
 Use actual case labels for `mistake_type`; expected status is `pass`, `block`,
 `needs_review`, or `hold`. Each case is evaluated independently, not as a sequential
-workflow. No data rows are supplied here because the dataset is unavailable.
+workflow. Generate the datasets with the commands below; outputs stay ignored.
 Only image path and StepSpec are passed to the inspector; scoring labels stay in
 the runner. The inspector implementation must also avoid reading label metadata.
 
@@ -105,7 +119,8 @@ The CLI uses the existing `control.cli.MockInspector`, which requires mock JSON
 snapshots produced by `MockAssemblyEnvironment`; it does not accept camera PNGs.
 For a real implementation call `src.evaluation.runner.run(manifest, inspector,
 config, output)` with an object implementing `inspect(image_path, step)`.
-The runner refuses to overwrite existing artifacts. It writes per-case CSV,
+The runner verifies generator image hashes and dataset/config agreement when
+provided, and refuses to overwrite existing artifacts. It writes per-case CSV,
 `.summary.json`, and `.tables.md` beside the selected output in ignored `outputs/`.
 New runs also save `.provenance.json` with manifest/image hashes, configuration,
 code revision and dirty state, inspector/model, environment and package versions.
@@ -129,20 +144,21 @@ Unavailable measurements are N/A. Different manifest hashes trigger a comparison
 warning. `--recovery path.json` and `--safety path.json` attach actual P1/P3 evidence
 without guessing their unagreed output schemas. Legacy CSVs remain readable but
 are labelled as lacking provenance. Explicit TimeoutError exceptions are counted
-as timeouts; a zero-confidence observation or HOLD alone does not prove a timeout.
+as timeouts. Returned P2 TIMEOUT/failure markers and actually invoked wrapper
+statuses are recorded too. Skipped Hybrid branches cannot reuse stale Gemma
+timeout state. A zero-confidence observation or HOLD alone does not prove timeout.
 
-Final evaluation remains blocked by P1's dataset/manifest and finished simulation,
-P2's configured real inspectors, and the target laptop/model installation. Once
-the provisional manifest adapter has been confirmed, the command template is:
+The tooling is integrated. P2's reported laptop results are in `docs/decisions.md`;
+its referenced raw outputs/provenance were not supplied here, so final evidence
+acceptance remains pending. On the provisioned demo laptop:
 
 ```powershell
-.venv/Scripts/python -m src.evaluation.runner path/to/confirmed-manifest.csv --inspector-factory your_team_module:create_gemma_inspector --step-id-interface --model gemma3:4b --endpoint http://localhost:11434 --output outputs/evaluation/eval_final.csv
+.venv/Scripts/python -m src.evaluation.runner outputs/dataset-v2/labels.csv --inspector-factory src.vision.factories:hybrid --model gemma3:4b --endpoint http://localhost:11434 --output outputs/evaluation/eval_final.csv
 ```
 
-Replace the factory with the agreed real factory; omit `--step-id-interface` if
-it already accepts StepSpec. Repeat for actual OpenCV/Hybrid inspectors with unique
-output paths, then generate the comparison report. No such factories or dataset
-are claimed to ship here. All failures remain in results; the runner relies on
+Repeat with `src.vision.factories:cv` and `:gemma` using unique output paths, then
+generate the comparison report. No step-ID adapter is needed for these factories.
+All failures remain in results; the runner relies on
 P2's bounded timeout implementation and does not create a competing timeout engine.
 
 ### Partner 2 inspector factories
@@ -198,6 +214,6 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m streamlit run src/dashboard/app.py
 ```
 
-Using the executable directly avoids PowerShell activation-policy problems. Installation and model provisioning require internet, but rendering and tests use local resources. Provision the chosen real model before disconnecting Wi-Fi. Do not download or pull a model during the offline demo. Follow the real-inspector factory instructions in the technical guide; no Partner 2 inspector currently ships on these integrated branches. The existing mock CLI remains available as `python -m src.control.cli --scenario missing_gasket` and is not AI inference.
+Using the executable directly avoids PowerShell activation-policy problems. Installation and model provisioning require internet, but rendering and tests use local resources. Provision the chosen real model before disconnecting Wi-Fi. Do not download or pull a model during the offline demo. Follow the real-inspector factory instructions in the technical guide; the integrated factories are in src/vision/factories.py. The existing mock CLI remains available as `python -m src.control.cli --scenario missing_gasket` and is not AI inference.
 
 Roles: Partner 1 owns simulation, datasets, scenarios, recovery testing and demo preparation; Partner 2 owns vision/model inspection; Partner 3 owns rules, workflow and audit; Partner 4 owns dashboard and evaluation reporting. This contribution extends Partner 4's dashboard/evaluation seams and retains Partner 3's authorization logic.
