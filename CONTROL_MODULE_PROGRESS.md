@@ -1,3 +1,5 @@
+> Historical plan/progress record. Current integrated setup and validation are in [README](README.md) and [VALIDATION](docs/VALIDATION.md). Unchecked roadmap items are not submission confirmation.
+
 # HoloGuide — Control Module Progress & Handoff
 
 **Area:** Partner 3 — Control: workflow, rules, override, audit  

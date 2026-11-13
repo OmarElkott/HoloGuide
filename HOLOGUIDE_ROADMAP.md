@@ -1,3 +1,5 @@
+> Historical plan/progress record. Current integrated setup and validation are in [README](README.md) and [VALIDATION](docs/VALIDATION.md). Unchecked roadmap items are not submission confirmation.
+
 # HoloGuide Roadmap
 
 *Offline AI assembly-inspection assistant for a virtual manufacturing workflow.*

@@ -1,0 +1,17 @@
+{
+  "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "code_revision": null,
+  "working_tree_dirty": null,
+  "source_sha256": "24ef187384e4c259f4d8ec35606071f55c069b95c5e1ea93fca113bbccb9a67e",
+  "revision_status": "unavailable",
+  "packages": {
+    "pytest": "9.2.0",
+    "streamlit": "1.66.1",
+    "numpy": "2.5.4",
+    "pydantic": "2.14.2",
+    "ollama": "0.6.3",
+    "opencv-python": "5.0.0.93"
+  },
+  "pybullet": null
+}

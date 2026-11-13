@@ -1,0 +1,85 @@
+
+=================================== ERRORS ====================================
+_________________ ERROR collecting tests/test_cv_inspector.py _________________
+ImportError while importing test module 'C:\Users\omarh\OneDrive\HACKATHON\zip-review\HoloGuide-main\tests\test_cv_inspector.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+..\..\..\..\AppData\Local\Programs\Python\Python312\Lib\importlib\__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_cv_inspector.py:8: in <module>
+    from src.simulation.assembly_env import AssemblyEnv
+src\simulation\assembly_env.py:5: in <module>
+    import pybullet as p
+E   ModuleNotFoundError: No module named 'pybullet'
+_______________ ERROR collecting tests/test_hybrid_inspector.py _______________
+ImportError while importing test module 'C:\Users\omarh\OneDrive\HACKATHON\zip-review\HoloGuide-main\tests\test_hybrid_inspector.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+..\..\..\..\AppData\Local\Programs\Python\Python312\Lib\importlib\__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_hybrid_inspector.py:7: in <module>
+    from src.simulation.assembly_env import AssemblyEnv
+src\simulation\assembly_env.py:5: in <module>
+    import pybullet as p
+E   ModuleNotFoundError: No module named 'pybullet'
+___________________ ERROR collecting tests/test_partner1.py ___________________
+ImportError while importing test module 'C:\Users\omarh\OneDrive\HACKATHON\zip-review\HoloGuide-main\tests\test_partner1.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+..\..\..\..\AppData\Local\Programs\Python\Python312\Lib\importlib\__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_partner1.py:9: in <module>
+    from src.simulation.assembly_env import AssemblyEnv
+src\simulation\assembly_env.py:5: in <module>
+    import pybullet as p
+E   ModuleNotFoundError: No module named 'pybullet'
+____________ ERROR collecting tests/test_partner1_deliverables.py _____________
+ImportError while importing test module 'C:\Users\omarh\OneDrive\HACKATHON\zip-review\HoloGuide-main\tests\test_partner1_deliverables.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+..\..\..\..\AppData\Local\Programs\Python\Python312\Lib\importlib\__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_partner1_deliverables.py:5: in <module>
+    from src.simulation.benchmark import benchmark, package_version
+src\simulation\benchmark.py:11: in <module>
+    from src.simulation.assembly_env import AssemblyEnv
+src\simulation\assembly_env.py:5: in <module>
+    import pybullet as p
+E   ModuleNotFoundError: No module named 'pybullet'
+__________________ ERROR collecting tests/test_simulation.py __________________
+ImportError while importing test module 'C:\Users\omarh\OneDrive\HACKATHON\zip-review\HoloGuide-main\tests\test_simulation.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+..\..\..\..\AppData\Local\Programs\Python\Python312\Lib\importlib\__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_simulation.py:5: in <module>
+    from src.simulation.assembly_env import AssemblyEnv
+src\simulation\assembly_env.py:5: in <module>
+    import pybullet as p
+E   ModuleNotFoundError: No module named 'pybullet'
+_______________ ERROR collecting tests/test_vision_factories.py _______________
+ImportError while importing test module 'C:\Users\omarh\OneDrive\HACKATHON\zip-review\HoloGuide-main\tests\test_vision_factories.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+..\..\..\..\AppData\Local\Programs\Python\Python312\Lib\importlib\__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_vision_factories.py:3: in <module>
+    from src.simulation.assembly_env import AssemblyEnv
+src\simulation\assembly_env.py:5: in <module>
+    import pybullet as p
+E   ModuleNotFoundError: No module named 'pybullet'
+=========================== short test summary info ===========================
+ERROR tests/test_cv_inspector.py
+ERROR tests/test_hybrid_inspector.py
+ERROR tests/test_partner1.py
+ERROR tests/test_partner1_deliverables.py
+ERROR tests/test_simulation.py
+ERROR tests/test_vision_factories.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 6 errors during collection !!!!!!!!!!!!!!!!!!!
+6 errors in 0.86s

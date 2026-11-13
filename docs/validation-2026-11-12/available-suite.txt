@@ -1,0 +1,8 @@
+................ssssss.................................................. [ 44%]
+........................................................................ [ 88%]
+..................                                                       [100%]
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_cli_integration.py:231: could not import 'pybullet': No module named 'pybullet'
+SKIPPED [4] tests\test_cli_integration.py:274: could not import 'pybullet': No module named 'pybullet'
+SKIPPED [1] tests\test_cli_integration.py:310: could not import 'pybullet': No module named 'pybullet'
+156 passed, 6 skipped in 6.18s

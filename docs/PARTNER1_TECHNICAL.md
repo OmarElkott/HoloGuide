@@ -1,4 +1,4 @@
-> Integration update — 2026-11-06: This branch now includes current `main` (`866f7c0`), including Partner 2's Gemma inspector and Partner 4's dashboard. The integrated suite passed **166 tests in 13.79 seconds**. References below to an unavailable inspector describe the November 2 implementation stage; inspector source is now present, but real-model accuracy, recovery and GPU measurements are still pending. Generated artifacts remain excluded from Git. See `docs/VISION_MODULE.md` for the current vision interface.
+> Historical handoff: dated implementation status and test totals below are retained as history. Simulation, dataset generation and cv/gemma/hybrid factories now ship together. Use [README](../README.md), [current P4 writeup](PERSON4_WRITEUP.md) and [VALIDATION](VALIDATION.md) for current setup and acceptance. P2-reported synthetic results are in [decisions](decisions.md); raw generated artifacts are excluded from this ZIP.
 
 # Partner 1: simulation and evaluation setup
 
@@ -24,19 +24,19 @@ V1 is a fixed-scene regression dataset: repetitions are intentional and do not c
 
 ## Scenario and recovery protocol
 
-`python -m src.simulation.runner --scenario missing_gasket --output outputs/scenario-001 --inspector-factory your_module:create_inspector`
+`python -m src.simulation.runner --scenario missing_gasket --output outputs/scenario-001 --inspector-factory src.vision.factories:hybrid`
 
-Replace `your_module:create_inspector` with Partner 2's installed factory. It takes no arguments and returns an inspector. The production workflow calls inspect(path, StepSpec). Add `--step-id-interface` for the roadmap inspect(path, step_id) contract. No inspector implementation is inferred or silently substituted.
+This built-in Hybrid factory ships in the project. It takes no arguments and returns an inspector. The production workflow calls inspect(path, StepSpec). Add `--step-id-interface` for the roadmap inspect(path, step_id) contract. No inspector implementation is inferred or silently substituted.
 
 The four scenarios use a fresh environment and workflow. Correct verifies each of four steps. Missing gasket verifies the base, physically places a premature cover, requires BLOCK, removes the cover, inserts the gasket and continues. Wrong cover verifies base and gasket, injects the decoy, requires BLOCK, replaces it and continues. Wrong order first checks the guard without invoking inspection, then explicitly injects the cover to test the visual path; after BLOCK it removes the cover and continues. These physical injections are deliberate test operations, logged separately from authorized placement. Fault cases stop on unexpected PASS, HOLD or Needs Review; they never force completion. Playback is bounded and advances one inspection per tick.
 
-`python -m src.evaluation.recovery --output outputs/recovery-real-001 --inspector-factory your_module:create_inspector --runs 20 --seed 50000 --evidence real-inspector`
+`python -m src.evaluation.recovery --output outputs/recovery-real-001 --inspector-factory src.vision.factories:hybrid --runs 20 --seed 50000 --evidence real-inspector`
 
 Run this only with the actual inspector. It produces 80 trials, including 20 correct controls and 20 of each fault. Recovery means an observed BLOCK followed by correction and PASS; completion is recorded separately. recovery_s measures from the blocking decision to the correction pass, including correction, rendering and inspection. It is not model-only latency. All attempts, failures, seeds, decisions and per-trial audits are retained. Evidence classification is a caller declaration: verify the factory and provenance before publishing any results.
 
 For image-level evaluation reuse Partner 4:
 
-`python -m src.evaluation.runner outputs/dataset-v2/labels.csv --output outputs/eval-real.csv --inspector-factory your_module:create_inspector`
+`python -m src.evaluation.runner outputs/dataset-v2/labels.csv --output outputs/eval-real.csv --inspector-factory src.vision.factories:hybrid`
 
 Without a real factory that command defaults to the existing JSON mock, which cannot inspect PNGs. Always specify the factory for these datasets.
 
@@ -46,7 +46,7 @@ In PowerShell:
 
 ```powershell
 $env:HOLOGUIDE_BACKEND_FACTORY = 'src.simulation.backend:create_session'
-$env:HOLOGUIDE_INSPECTOR_FACTORY = 'your_module:create_inspector'
+$env:HOLOGUIDE_INSPECTOR_FACTORY = 'src.vision.factories:hybrid'
 # Only if Partner 2 implements inspect(path, step_id):
 $env:HOLOGUIDE_STEP_ID_INTERFACE = '1'
 python -m streamlit run src/dashboard/app.py
@@ -60,9 +60,9 @@ Select Real and start/reset the session. Load a scenario before placing any part
 
 ## Limits and remaining validation
 
-No Partner 2 real inspector is present in the inspected branches. Scripted test observations verify orchestration, rendering, stopping behavior and audit integration only. They do not establish AI accuracy, GPU latency, real recovery success or offline network behavior. Real-model evaluation, GUI rehearsal and physical recording remain pending. Real results must replace placeholders only after measured runs on the demo laptop. Never publish the scripted recovery CSV as competition performance.
+The original November 2 inspection lacked P2 inspectors; the current snapshot includes them. Scripted test observations verify orchestration, rendering, stopping behavior and audit integration only. They do not establish AI accuracy, GPU latency, real recovery success or offline network behavior. Real-model evaluation, GUI rehearsal and physical recording remain pending. Real results must replace placeholders only after measured runs on the demo laptop. Never publish the scripted recovery CSV as competition performance.
 
-## Work before the real inspector arrives
+## Scripted rehearsal alternative
 
 Run `python -m src.simulation.rehearsal --output outputs/rehearsal-001` for an entirely local rendered rehearsal. It creates all four scenario episodes, audits, a JSON result file and a labeled animated GIF. Observations are prewritten test fixtures; neither image contents nor ground-truth labels are used for inference. This lets the team rehearse the flow without presenting a substitute as Partner 2's AI implementation.
 

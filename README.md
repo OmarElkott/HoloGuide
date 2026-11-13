@@ -1,203 +1,133 @@
-> Integration update — 2026-11-06: This branch now includes current `main` (`866f7c0`), including Partner 2's Gemma inspector and Partner 4's dashboard. The integrated suite passed **166 tests in 13.79 seconds**. References below to an unavailable inspector describe the November 2 implementation stage; inspector source is now present, but real-model accuracy, recovery and GPU measurements are still pending. Generated artifacts remain excluded from Git. See `docs/VISION_MODULE.md` for the current vision interface.
-
 # HoloGuide
-A locally powered AI assembly system that verifies manufacturing steps and catches defects
 
-## Core idea
-- AI observes the virtual assembly through simulated camera images.
-- Fixed rules validate each step and prevent incorrect progression.
-- The dashboard explains missing or incorrect parts and confirms corrections.
-- The operator can inspect system decisions and override when appropriate.
+HoloGuide is a local, simulation-only assembly inspection prototype. PyBullet renders
+four assembly steps; OpenCV/Gemma inspectors return observations; deterministic rules
+and Workflow authorize progress; Streamlit displays corrections and audit events.
+It detects missing parts, wrong parts and visible out-of-order parts. It does not
+establish physical-world performance or infer historical action order from a still image.
 
-## Scope
-- One virtual assembly
-- Four assembly steps
-- Three mistake types: missing part, wrong part, incorrect order
-- Local AI inspection
-- Dashboard-based operator workflow
+## Current integration status (November 12, 2026)
 
-## Team roles
-- Simulation and assembly interaction
-- AI inspection and image testing
-- Workflow rules, dashboard, and integration
+All four contributions ship in this snapshot: simulation/datasets/scenarios (P1),
+OpenCV/Gemma/Hybrid inspection (P2), control/workflow/audit and real CLI (P3), and
+dashboard/evaluation/reporting (P4). Real dashboard wiring is implemented through
+`src.simulation.backend:create_session`; no custom teammate module is required.
 
-## Development and tests
+See [current validation and remaining acceptance](docs/VALIDATION.md).
+[Vision decisions](docs/decisions.md) records teammate-reported November 7 synthetic
+results; the generated raw datasets and run artifacts are not included in this ZIP.
+Those figures are historical evidence, not measurements from the current validation.
+Older dated progress reports are historical; this README and VALIDATION.md describe
+the current package. Full hackathon submission readiness still requires the target
+laptop/offline rehearsal, final video, finalized submission materials and link checks.
 
-Use Python 3.11 or 3.12. From the repository root:
+## Install and test on Windows
 
-Full install check on this Windows/Python 3.12 host selected a PyBullet source
-build and failed because Microsoft Visual C++ 14.0+ Build Tools were absent.
-The mock-development install below avoids PyBullet. For the full simulator setup,
-use the team's Python 3.11 environment with a compatible wheel or install the
-required C++ toolchain, then repeat the full install; that path is not verified here.
-
-```powershell
-python -m venv .venv
-.venv/Scripts/python -m pip install -r requirements.txt
-.venv/Scripts/python -m pytest -q
-```
-
-For control, evaluation and mock dashboard development without PyBullet/Ollama:
-
-```powershell
-.venv/Scripts/python -m pip install pytest pydantic pyyaml streamlit
-.venv/Scripts/python -m pytest -q
-.venv/Scripts/python -m streamlit run src/dashboard/app.py
-```
-
-Tests use temporary files. Shared Person 4 fixtures live in `tests/conftest.py`.
-The dashboard defaults to existing control mocks and production Workflow. Place the current part, inspect,
-correct faults, or submit an override with an operator identifier and typed reason.
-Removing a verified part invalidates its approval through Workflow first.
-Each demo session has its own persisted audit under ignored `outputs/dashboard/`.
-Reset closes supported environment resources and retains old audit files. The
-camera panel displays the current rendered image or an explicit unavailable/mock
-placeholder. The last inspected image and step remain distinct from the current
-workflow step. The audit viewer supports event filters and JSONL download.
-Project Streamlit telemetry is disabled; network availability is not monitored.
-
-`Run scripted mock demo` executes the existing four scenario loops, followed by
-low-confidence review, an injected mock TimeoutError, HOLD recovery, reinspection,
-and a clearly labelled logged demonstration override. Episodes have separate
-workflows and audits. Progress updates automatically; Stop halts between episodes
-and reset releases resources. This is not a real-model timeout benchmark or the
-final three-minute hardware rehearsal. The scenario transcripts retain the
-mistakes, correction messages, reinspection and completion events.
-
-Real mode requires the teammate implementations; it never falls back to mocks.
-P1's unmerged `feat/sim-assembly-env` currently supplies `render_to_file(path)` and
-`close()`, but `place_part`/`remove_part` are still placeholders. No P2 inspector
-is merged. After those dependencies are ready, configure
-`HOLOGUIDE_BACKEND_FACTORY=your_team_module:create_dashboard_session`. That factory
-must return `DashboardSession(mode='real', environment=env, inspector=inspector,
-model=actual_model_name, endpoint=actual_endpoint)`. The dashboard consumes
-`render_to_file(path)`, `place_part`, `remove_part`, and `close` only; it never calls
-`parts_present()` or passes simulation truth to inspection. The actual control
-contract is `inspect(path, StepSpec)`. If P2 implements the roadmap's step-ID
-interface, explicitly wrap it with `src.dashboard.backends.StepIdInspectorAdapter`.
-No signatures are guessed. Factory construction/cleanup belongs to the integrated
-backend. Reset and garbage collection close supported resources; Streamlit has
-no reliable immediate browser-disconnect hook, so immediate tab-close cleanup
-is not guaranteed. Use reset before leaving a real session.
-
-## Evaluation
-
-No labelled evaluation dataset or real Inspector ships in this checkout.
-Do not treat mock test outcomes as model performance. Until the dataset owner
-supplies its manifest contract, the runner supports this **provisional adapter**:
-
-```csv
-image_path,step_id,mistake_type,expected_status
-```
-
-Paths are relative to the manifest; step IDs reference `config/assembly.yaml`.
-Use actual case labels for `mistake_type`; expected status is `pass`, `block`,
-`needs_review`, or `hold`. Each case is evaluated independently, not as a sequential
-workflow. No data rows are supplied here because the dataset is unavailable.
-Only image path and StepSpec are passed to the inspector; scoring labels stay in
-the runner. The inspector implementation must also avoid reading label metadata.
-
-```powershell
-.venv/Scripts/python -m src.evaluation.runner path/to/manifest.csv --output outputs/evaluation/run-01.csv
-```
-
-The CLI uses the existing `control.cli.MockInspector`, which requires mock JSON
-snapshots produced by `MockAssemblyEnvironment`; it does not accept camera PNGs.
-For a real implementation call `src.evaluation.runner.run(manifest, inspector,
-config, output)` with an object implementing `inspect(image_path, step)`.
-The runner refuses to overwrite existing artifacts. It writes per-case CSV,
-`.summary.json`, and `.tables.md` beside the selected output in ignored `outputs/`.
-New runs also save `.provenance.json` with manifest/image hashes, configuration,
-code revision and dirty state, inspector/model, environment and package versions.
-Hardware measurements and model digest must be recorded on the demo laptop.
-Accuracy is exact decision-status agreement grouped by ground-truth mistake type.
-False-block rate is BLOCK / ground-truth PASS cases (undefined when no eligible
-cases). HOLD/review counts and inspection exceptions are reported separately;
-failed cases remain in accuracy denominators. Latency measures inspection,
-validation, and rule evaluation, excluding artifact writes; p95 uses linear
-interpolation. Mock latency is not model latency.
-
-Regenerate tables from existing CSVs without rerunning inspection:
-
-```powershell
-.venv/Scripts/python -m src.evaluation.report --result "Mock validation=outputs/evaluation/run-01.csv" --output outputs/evaluation/report-01.md
-# When actual corresponding results exist:
-.venv/Scripts/python -m src.evaluation.report --result "Gemma only=outputs/evaluation/gemma.csv" --result "OpenCV only=outputs/evaluation/opencv.csv" --result "Hybrid=outputs/evaluation/hybrid.csv" --output outputs/evaluation/comparison.md
-```
-
-Unavailable measurements are N/A. Different manifest hashes trigger a comparison
-warning. `--recovery path.json` and `--safety path.json` attach actual P1/P3 evidence
-without guessing their unagreed output schemas. Legacy CSVs remain readable but
-are labelled as lacking provenance. Explicit TimeoutError exceptions are counted
-as timeouts; a zero-confidence observation or HOLD alone does not prove a timeout.
-
-Final evaluation remains blocked by P1's dataset/manifest and finished simulation,
-P2's configured real inspectors, and the target laptop/model installation. Once
-the provisional manifest adapter has been confirmed, the command template is:
-
-```powershell
-.venv/Scripts/python -m src.evaluation.runner path/to/confirmed-manifest.csv --inspector-factory your_team_module:create_gemma_inspector --step-id-interface --model gemma3:4b --endpoint http://localhost:11434 --output outputs/evaluation/eval_final.csv
-```
-
-Replace the factory with the agreed real factory; omit `--step-id-interface` if
-it already accepts StepSpec. Repeat for actual OpenCV/Hybrid inspectors with unique
-output paths, then generate the comparison report. No such factories or dataset
-are claimed to ship here. All failures remain in results; the runner relies on
-P2's bounded timeout implementation and does not create a competing timeout engine.
-
-### Partner 2 inspector factories
-
-The vision module now ships zero-argument factories in `src/vision/factories.py`
-(no `--step-id-interface` needed; all accept a StepSpec):
-
-| Factory | Inspector |
-|---|---|
-| `src.vision.factories:cv` | OpenCV colour masks + shape checks (no GPU, ~15 ms) |
-| `src.vision.factories:gemma` | Gemma 3 4B via local Ollama, wrapped in `ai_timeout_s` |
-| `src.vision.factories:hybrid` | OpenCV decides; Gemma only settles images OpenCV is unsure about |
-
-```powershell
-.venv/Scripts/python -m src.simulation.dataset --output outputs/dataset-v1
-.venv/Scripts/python -m src.evaluation.runner outputs/dataset-v1/labels.csv --inspector-factory src.vision.factories:hybrid --model gemma3:4b --endpoint http://localhost:11434 --output outputs/evaluation/hybrid-v1.csv
-.venv/Scripts/python -m src.vision.latency_benchmark outputs/dataset-v1/labels.csv --output outputs/benchmark/vis12 --inspectors cv,gemma,hybrid
-$env:HOLOGUIDE_BACKEND_FACTORY = 'src.simulation.backend:create_session'
-$env:HOLOGUIDE_INSPECTOR_FACTORY = 'src.vision.factories:hybrid'   # dashboard real mode
-```
-
-Measured results and the go/no-go choice are in `docs/decisions.md`; module details
-in `docs/VISION_MODULE.md`; the writeup section is `docs/WRITEUP_AI_INSPECTION.md`.
-
-The public notebook `notebooks/hologuide_demo.ipynb` is saved with outputs. To re-run it top to bottom
-(uses Hybrid if a local Ollama serves `gemma3:4b`, otherwise OpenCV; never downloads a model):
-
-```powershell
-.venv/Scripts/python -m pip install nbconvert ipykernel
-.venv/Scripts/python -m jupyter nbconvert --to notebook --execute notebooks/hologuide_demo.ipynb --output-dir outputs/notebook-run
-```
-
-See `docs/PERSON4_WRITEUP.md` for the writeup, task status, and submission checklist.
-
-## Partner 1 rendered simulation contribution
-
-See [simulation, dataset and recovery documentation](docs/PARTNER1_TECHNICAL.md),
-[demo script and recording plan](docs/PARTNER1_DEMO.md), and
-[delivery status](docs/PARTNER1_STATUS.md).
-
-![HoloGuide architecture](docs/architecture.png)
-
-### Windows / Python 3.11
-
-Open PowerShell in the repository. Python 3.11 and Git are prerequisites.
-The following installation command downloads packages; run it only when network use is authorized.
+Use Python 3.11 or 3.12. On this Windows host, both selected a PyBullet source
+build, and no compatible wheel was found on the package index. Install Microsoft
+C++ Build Tools (MSVC C++ compiler and Windows SDK) for that path, or use a host
+with a compatible wheel/toolchain. Python 3.11 alone did not resolve installation.
+Run from this folder after preparing that prerequisite:
 
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m src.simulation.dataset --output outputs/dataset-v2 --randomize --seed 2026
+.\.venv\Scripts\python.exe -m pip check
+```
+
+For mock-only development, install `pytest pydantic pyyaml streamlit`. This subset
+runs the mock dashboard and control code, but cannot run the complete suite, whose
+simulation and vision tests need the full requirements. Tests use local fixtures;
+passing them does not prove a live Ollama/Gemma service works.
+
+## Dashboard and CLI
+
+```powershell
 .\.venv\Scripts\python.exe -m streamlit run src/dashboard/app.py
 ```
 
-Using the executable directly avoids PowerShell activation-policy problems. Installation and model provisioning require internet, but rendering and tests use local resources. Provision the chosen real model before disconnecting Wi-Fi. Do not download or pull a model during the offline demo. Follow the real-inspector factory instructions in the technical guide; no Partner 2 inspector currently ships on these integrated branches. The existing mock CLI remains available as `python -m src.control.cli --scenario missing_gasket` and is not AI inference.
+The dashboard starts in Mock mode with deterministic JSON scenes. The scripted mock
+demo includes faults, corrections, review, injected timeout, HOLD recovery and an
+explicitly logged override. It is not AI performance evidence.
 
-Roles: Partner 1 owns simulation, datasets, scenarios, recovery testing and demo preparation; Partner 2 owns vision/model inspection; Partner 3 owns rules, workflow and audit; Partner 4 owns dashboard and evaluation reporting. This contribution extends Partner 4's dashboard/evaluation seams and retains Partner 3's authorization logic.
+For rendered-image inspection, configure the built-in backend before starting:
+
+```powershell
+$env:HOLOGUIDE_BACKEND_FACTORY = 'src.simulation.backend:create_session'
+$env:HOLOGUIDE_INSPECTOR_FACTORY = 'src.vision.factories:hybrid'
+$env:HOLOGUIDE_MODEL_NAME = 'gemma3:4b'
+$env:HOLOGUIDE_MODEL_ENDPOINT = 'http://localhost:11434'
+.\.venv\Scripts\python.exe -m streamlit run src/dashboard/app.py
+```
+
+Select Real, then Start selected mode / reset session. Load a scenario in a fresh
+session and play its steps. Reset between scenarios and before leaving to close
+resources. Browser-tab closure does not guarantee immediate resource cleanup.
+`src.vision.factories:cv` uses OpenCV without Ollama; `:gemma` uses only Gemma;
+`:hybrid` uses OpenCV and asks Gemma when uncertain; `:hybrid_explained` also asks
+Gemma for explanatory text on every image. Provision Ollama and the chosen model
+before using Gemma. No factory downloads a model or silently substitutes mock data.
+Hybrid's reported clean-render benchmarks used no Gemma calls: describe them as
+OpenCV-led results, and rehearse the live model path separately.
+
+```powershell
+.\.venv\Scripts\python.exe -m src.control.cli --scenario missing_gasket
+.\.venv\Scripts\python.exe -m src.control.cli --mode real --scenario wrong_cover --inspector-factory src.vision.factories:cv
+```
+
+Workflow guards placement and progression. Removing verified parts invalidates
+approval. Overrides require an operator identity and typed reason; audits persist
+under ignored `outputs/`. The current scene and last inspected frame are distinct.
+
+## Evaluation and provenance
+
+```powershell
+.\.venv\Scripts\python.exe -m src.simulation.dataset --output outputs/dataset-v2 --randomize --seed 2026
+.\.venv\Scripts\python.exe -m src.evaluation.runner outputs/dataset-v2/labels.csv --inspector-factory src.vision.factories:hybrid --model gemma3:4b --endpoint http://localhost:11434 --output outputs/evaluation/hybrid-v2.csv
+.\.venv\Scripts\python.exe -m src.evaluation.report --result "Hybrid=outputs/evaluation/hybrid-v2.csv" --output outputs/evaluation/comparison.md
+.\.venv\Scripts\python.exe -m src.evaluation.recovery --output outputs/recovery/cv-run --inspector-factory src.vision.factories:cv --runs 20 --evidence real-inspector
+```
+
+Output paths must be new. The manifest requires `image_path,step_id,mistake_type,
+expected_status`; the included generator supplies this contract. Labels stay in
+scoring; inspectors receive only an image and StepSpec. All built-in factories
+accept StepSpec; no `--step-id-interface` adapter is needed. The evaluation CLI
+defaults to JSON mocks, so always specify an image inspector for generated PNGs.
+
+Each run saves case CSV, summary JSON, Markdown tables and provenance with dataset,
+image and runtime-source hashes, configuration, packages and model metadata.
+`code_revision` and `working_tree_dirty` are null when Git history is unavailable;
+`revision_status` makes that explicit. `source_sha256` fingerprints sorted paths
+and LF-normalized contents of `src/**/*.py`, `config/*.yaml` and `requirements.txt`,
+including dirty source edits and ZIP exports. It is not a fabricated Git commit.
+Record actual hardware and model digest separately.
+
+Accuracy is exact expected/actual decision agreement by mistake type; failures stay
+in denominators. False-block rate is BLOCK / expected PASS cases. HOLD and review
+are separate. Explicit TimeoutError is timeout evidence; low confidence alone is
+not. Latency includes inspection, validation and rules, excluding render/write time;
+p95 is linearly interpolated. Dashboard latency also includes workflow/audit work.
+Compare inspectors on matching manifest hashes and conditions.
+
+## Notebook, offline demo and handoff
+
+`notebooks/hologuide_demo.ipynb` is included with saved outputs. To execute it:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install nbconvert ipykernel
+.\.venv\Scripts\python.exe -m jupyter nbconvert --to notebook --execute notebooks/hologuide_demo.ipynb --output-dir outputs/notebook-run
+```
+
+The notebook uses Hybrid when local Ollama serves the model, otherwise OpenCV;
+it never downloads a model. Install packages and provision models before disconnecting
+Wi-Fi. Telemetry is disabled for Streamlit, but network activity is not monitored.
+A successful localhost call alone does not prove zero external traffic.
+
+![Architecture](docs/architecture.png)
+
+P1 owns simulation, datasets, scenarios, recovery and video; P2 owns inspectors and
+model evidence; P3 owns control, authorization and audit; P4 owns dashboard,
+evaluation/reporting and final documentation coordination. See the current
+[P4 writeup](docs/PERSON4_WRITEUP.md), [simulation guide](docs/PARTNER1_TECHNICAL.md),
+[vision guide](docs/VISION_MODULE.md), and [P3 report](docs/FINAL_PARTNER3_REPORT.md).

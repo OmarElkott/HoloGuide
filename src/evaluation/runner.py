@@ -1,7 +1,8 @@
 """Run an existing Inspector over an explicit CSV manifest, without label leakage.
 
-No dataset ships with this checkout. The provisional manifest adapter is documented
-in README; it does not assert a shared dataset contract.
+Generate PNG datasets and compatible labels with src.simulation.dataset. The CSV
+contract and explicit image-inspector factories are documented in README; raw
+generated datasets are excluded from source archives.
 """
 import argparse
 import csv

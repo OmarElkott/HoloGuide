@@ -50,6 +50,11 @@ def test_provenance_identifies_dataset_config_revision_and_timeouts(tmp_path, as
     assert len(provenance['manifest_sha256']) == 64
     assert len(provenance['images'][0]['sha256']) == 64
     assert provenance['configuration']['name'] == assembly_config.name
-    assert provenance['code_revision']
+    assert len(provenance['source_sha256']) == 64
+    assert provenance['revision_status'] in {'git', 'unavailable'}
+    if provenance['revision_status'] == 'git':
+        assert provenance['code_revision']
+    else:
+        assert provenance['code_revision'] is None
     assert provenance['model'] == 'test-only'
     assert generate_report({'Test timeout': output}, tmp_path / 'tables.md')['Test timeout']['timeout_count'] == 1

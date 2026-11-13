@@ -1,12 +1,12 @@
 """Thin dashboard controls for the shared rendered scenario runner."""
 from uuid import uuid4
-from src.simulation.runner import ScenarioRunner
-from src.simulation.scenarios import NAMES
 
 
 def show_launcher(st, session):
     if session.mode != 'real':
         return
+    from src.simulation.runner import ScenarioRunner
+    from src.simulation.scenarios import NAMES
     st.subheader('Rendered scenario launcher')
     st.caption('Start with an empty, fresh session. Faults are deliberately injected and audited.')
     name = st.selectbox('Scenario', NAMES)
