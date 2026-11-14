@@ -1,4 +1,4 @@
-> Integration update — 2026-11-06: This branch now includes current `main` (`866f7c0`), including Partner 2's Gemma inspector and Partner 4's dashboard. The integrated suite passed **166 tests in 13.79 seconds**. References below to an unavailable inspector describe the November 2 implementation stage; inspector source is now present, but real-model accuracy, recovery and GPU measurements are still pending. Generated artifacts remain excluded from Git. See `docs/VISION_MODULE.md` for the current vision interface.
+> **Current status (2026-11-13):** integrated and measured. The real inspectors (OpenCV, Gemma 3 4B, Hybrid, Gemma-first) are merged, and the simulation now also has foreign objects (`place_foreign_object`) and a live line monitor with shifts (`src/simulation/live_monitor.py`). Measured results: [`decisions.md`](decisions.md). Overview: the [README](../README.md). The sections below record the Nov 2–6 implementation notes.
 
 # Partner 1: simulation and evaluation setup
 
@@ -60,7 +60,7 @@ Select Real and start/reset the session. Load a scenario before placing any part
 
 ## Limits and remaining validation
 
-No Partner 2 real inspector is present in the inspected branches. Scripted test observations verify orchestration, rendering, stopping behavior and audit integration only. They do not establish AI accuracy, GPU latency, real recovery success or offline network behavior. Real-model evaluation, GUI rehearsal and physical recording remain pending. Real results must replace placeholders only after measured runs on the demo laptop. Never publish the scripted recovery CSV as competition performance.
+Real-model evaluation is now done: see [`decisions.md`](decisions.md) for accuracy, latency, recovery trials and the 20-unit shifts with real Gemma. Scripted test observations, used in the unit tests, verify orchestration only; never publish them as model performance. All results are on synthetic renders.
 
 ## Work before the real inspector arrives
 

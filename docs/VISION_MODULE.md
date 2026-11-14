@@ -1,6 +1,8 @@
 # HoloGuide - Vision / AI Inspection (Partner 2) - Handoff
 
-**Tasks:** VIS-01 to VIS-12, DOC-03d (writeup section: [`WRITEUP_AI_INSPECTION.md`](WRITEUP_AI_INSPECTION.md)) and DOC-04a/04b (notebook), all done. Results and the go/no-go decision (option B, Hybrid) are in [`decisions.md`](decisions.md).
+> **Update (2026-11-13):** Gemma now does measurable work. `ForeignObjectIdentifier` (`foreign_objects.py`) names objects OpenCV can only localise, `GemmaFirstInspector` lets Gemma read every frame with OpenCV as a safety net, and `outage.py` simulates an unreachable Gemma. Notes below about Gemma never being consulted, and the test count, describe Nov 7. Current results: [`decisions.md`](decisions.md) (the "Foreign objects and Gemma-first" and "Live line monitor" sections).
+
+**Tasks:** VIS-01 to VIS-12 and DOC-04a/04b (notebook), all done. Results and the go/no-go decision are in [`decisions.md`](decisions.md).
 **Core rule:** the AI reports, the rules decide. An inspector never raises, never sees ground truth, and never changes workflow state.
 
 ## What each file does
