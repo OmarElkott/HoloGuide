@@ -181,13 +181,11 @@ The public notebook `notebooks/hologuide_demo.ipynb` is saved with outputs. To r
 .venv/Scripts/python -m jupyter nbconvert --to notebook --execute notebooks/hologuide_demo.ipynb --output-dir outputs/notebook-run
 ```
 
-See `docs/PERSON4_WRITEUP.md` for the writeup, task status, and submission checklist.
+Measured results, trade-offs and reproduce commands: `docs/decisions.md`.
 
 ## Partner 1 rendered simulation contribution
 
-See [simulation, dataset and recovery documentation](docs/PARTNER1_TECHNICAL.md),
-[demo script and recording plan](docs/PARTNER1_DEMO.md), and
-[delivery status](docs/PARTNER1_STATUS.md).
+See [simulation, dataset and recovery documentation](docs/PARTNER1_TECHNICAL.md).
 
 ![HoloGuide architecture](docs/architecture.png)
 

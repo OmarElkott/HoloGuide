@@ -12,7 +12,7 @@ from src.dashboard.presentation import STATE_BANNERS, camera_image, filter_audit
 from src.dashboard.session import DashboardSession
 
 
-def show_session(session, *, controls=True):
+def show_session(session, *, controls=True, camera=True):
     workflow = session.workflow
     completed = (len(session.config.steps) if workflow.state.value == 'complete'
                  else workflow.current_step_id - 1)
@@ -26,13 +26,11 @@ def show_session(session, *, controls=True):
     if decision:
         st.write(f'Last decision: {decision.status.value} — inspected step {decision.step_id}')
         getattr(st, level)(decision.message)
-    st.subheader('Camera image')
-    image, placeholder = camera_image(session.frame)
-    if image:
+    image, _ = camera_image(session.frame) if camera else (None, None)
+    if image:   # shown only when there is a snapshot; the live line has its own camera view
+        st.subheader('Camera image')
         st.image(image, caption='Current scene snapshot from the inspection render interface')
-    else:
-        st.info(placeholder)
-    if session.inspected_frame and session.inspected_frame != session.frame:
+    if camera and session.inspected_frame and session.inspected_frame != session.frame:
         with st.expander(f'Last inspected image — step {session.inspected_step_id}'):
             old_image, old_placeholder = camera_image(session.inspected_frame)
             if old_image:
@@ -170,7 +168,8 @@ def main():
             with st.expander('Single-step scenario launcher (manual, one inspection per click)'):
                 show_launcher(st, session)
         runner = getattr(session, 'scenario_runner', None)
-        show_session(session, controls=(runner is None or runner.done) and not live_line_active(session))
+        show_session(session, controls=(runner is None or runner.done) and not live_line_active(session),
+                     camera=not live_line_active(session))
 
 
 if __name__ == '__main__':
