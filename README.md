@@ -80,7 +80,9 @@ inspection. The rendered scenario launcher includes `foreign_object` (a screwdri
 src.vision.factories:hybrid --output outputs/live/run1` for an MP4): a simulated gantry lowers each part into place
 while HoloGuide watches. A deterministic motion watchdog inspects only when the scene is still; a BLOCK, review,
 HOLD or a pick refused by the order guard stops the line, and only an operator action (correction, acknowledgement,
-logged override with a reason, cleared hold) restarts it.
+logged override with a reason, cleared hold) restarts it. The panel also has an **E-STOP**, a **whole-shift** mode with a
+KPI board (faults caught / escaped / false stops / units per hour; `--shift 20` on the CLI), a **simulated AI
+outage** toggle, and an **offline self-test** badge (local endpoint, model on disk, no internet route).
 
 ## Evaluation
 

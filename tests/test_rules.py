@@ -199,3 +199,15 @@ def test_repeated_evaluation_is_deterministic_except_timestamp(config):
 def test_invalid_threshold_is_rejected(config):
     with pytest.raises(ValueError, match="threshold"):
         evaluate(Observation(), config.step(1), 1.01)
+
+
+def test_order_violation_names_the_skipped_part():
+    from src.config import load_config
+    from src.control.rules import RuleContext, evaluate as evaluate_src
+    from src.vision.schemas import Observation as Obs
+    config = load_config()
+    step = config.step(2)
+    obs = Obs(parts_detected=["base_plate", "cover"], confidence=0.95)
+    decision = evaluate_src(obs, step, 0.7, context=RuleContext.from_config(config, step))
+    assert decision.message == ("Incorrect assembly order: Cover placed before Gasket. "
+                                "Remove Cover, add Gasket, then inspect Insert gasket again.")

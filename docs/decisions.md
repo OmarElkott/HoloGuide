@@ -177,6 +177,43 @@ examples while staying in simulation.
 
   With OpenCV alone, the foreign object stops the line as NEEDS_REVIEW instead, because the object can't be named.
 
+**Additions (same evening):**
+
+- **E-STOP.** It is available whenever the line runs and freezes the gantry mid-motion. Releasing it needs an
+  operator ID and a typed reason. Both `emergency_stop` and `estop_released` are audited.
+- **The AI handoff on every frame**, e.g. "OpenCV: unrecognised object -> Gemma: 'purple screwdriver (tool)'
+  (1.5 s) -> rules: BLOCK". It is built from the inspector's own status, never from labels.
+- **The scripted operator is labelled.** CLI clips and unattended shifts show a yellow "SCRIPTED OPERATOR" banner on
+  every automatic action, and they use the operator ID `scripted-operator`.
+- **Shift mode** (`Shift`, `--shift N`): N assemblies in a row, each with a seeded random fault or none. KPIs:
+  faults caught, faults escaped, false stops, holds, E-stops, mean cycle time and units per hour. The fault plan
+  drives only the gantry and the scoring; the inspector still gets only PNG paths.
+- **Simulated AI outage** (`src/vision/outage.py`, a dashboard toggle). Gemma is swapped for an unreachable stand-in,
+  so the real failure paths run:
+  - Hybrid keeps passing known parts on OpenCV and sends foreign objects to review.
+  - Gemma-first gives HOLD.
+  - In both cases the unit never passes.
+- **Offline self-test** (`src/dashboard/offline_check.py`, a dashboard badge and `run_video_demo.sh`). It checks
+  three things: the endpoint is on localhost, the model is already on disk, and there is no route to the internet
+  (one TCP connect to 1.1.1.1:53, no data sent). It reports "OFFLINE VERIFIED", or honestly "LOCAL AI - NETWORK
+  STILL UP".
+- **A clearer order message.** The cover without a gasket now says "Cover placed before Gasket. Remove Cover, add
+  Gasket, then inspect Insert gasket again". Before, it only said the cover belongs to a later step.
+
+**Shift results with real Gemma** (20 units, fault rate 0.4, seed 2026, scripted operator; `outputs/live/`):
+
+| Inspector | Faults injected | Caught | Escaped | False stops | Holds | Mean cycle s | Units/hour |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Hybrid + identifier | 8 (4 missing gasket, 3 foreign object, 1 wrong order) | 8 | 0 | 0 | 0 | 7.8 | 461.7 |
+| Gemma-first + identifier | 8 (same seed) | 8 | 0 | 0 | 0 | 19.6 | 183.8 |
+
+Both designs were safe on this shift. The difference is cost: Gemma-first calls Gemma on every settled frame
+(about 3 s each), so its cycle is about 2.5x longer. The hybrid calls Gemma only when OpenCV finds something it
+can't name. This measured trade-off is why the hybrid is the default.
+Cycle time is in *simulated* line time: the animation runs at 10 frames per simulated second, plus the measured
+inspection time, plus 2 s of scripted operator delay for each stop. So units/hour shows the relative cost of
+inspection and stops, not a real production rate.
+
 ## Known limitations
 
 - The renders are clean and synthetic. OpenCV's 100% depends on the distinct part colours and the fixed, shadow-free lighting. Its thresholds (`CVSettings`) were checked on both datasets: present parts cover at least 0.37% of the image and absent parts 0.00%. A real camera would need recalibration.

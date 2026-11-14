@@ -49,6 +49,9 @@ curl -sf "$ENDPOINT/api/generate" \
 ok "Gemma is loaded and warm"
 ollama ps 2>/dev/null | sed 's/^/     /' || true
 
+# 5. Offline self-test (local endpoint, model on disk, no internet route; downloads nothing)
+"$PY" -c "from src.dashboard.offline_check import run_check; r = run_check('$ENDPOINT', '$MODEL'); print('  ' + r.verdict); [print('     ' + d) for d in r.details]"
+
 if [[ $CHECK_ONLY -eq 1 ]]; then
   echo; echo "All checks passed. Run without --check to open the dashboard."; exit 0
 fi
@@ -77,15 +80,27 @@ cat <<'EOF'
                 tick "Approve current step" -> Submit override.
                 Scroll to Session audit to show the logged override.
 
+ 6 LIVE LINE   Reset. Live line monitor -> Single scenario -> foreign_object
+                -> Start line. The gantry drops parts; the screwdriver stops the
+                line: "AI HANDOFF: OpenCV: unrecognised object -> Gemma: ..."
+                Type an operator ID -> "Correct the fault" -> line finishes.
+ 7 E-STOP       Reset. Start any scenario, press E-STOP mid-drop. Release needs
+                operator + typed reason.
+ 8 AI OUTAGE    Reset. Toggle "Simulate AI outage", run foreign_object: the
+                line stops for REVIEW or HOLD instead of passing. Toggle back.
+ 9 SHIFT        Reset. Whole shift, 10 units, scripted operator ticked -> KPI
+                board: faults caught / escaped (0) / units per hour.
+
  DON'T record the "Run scripted mock demo" button or a yellow Mock banner.
  Stop the dashboard with Ctrl+C when you're done.
 ─────────────────────────────────────────────────────────────────────────
 
 EOF
 
-# 6. Real backend: PyBullet simulator + Gemma-first inspector (Gemma decides; OpenCV can only send a disagreement to review)
+# 6. Real backend: PyBullet simulator + inspector. Default Gemma-first (Gemma reads every frame; OpenCV can
+#    only send a disagreement to review). For the fast hybrid: HOLOGUIDE_INSPECTOR_FACTORY=src.vision.factories:hybrid
 export HOLOGUIDE_BACKEND_FACTORY=src.simulation.backend:create_session
-export HOLOGUIDE_INSPECTOR_FACTORY=src.vision.factories:gemma_first
+export HOLOGUIDE_INSPECTOR_FACTORY="${HOLOGUIDE_INSPECTOR_FACTORY:-src.vision.factories:gemma_first}"
 export HOLOGUIDE_MODEL_NAME="$MODEL"
 export HOLOGUIDE_MODEL_ENDPOINT="$ENDPOINT"
 export STREAMLIT_BROWSER_GATHER_USAGE_STATS=false   # no telemetry, keeps it offline

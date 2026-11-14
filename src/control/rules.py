@@ -101,13 +101,15 @@ def evaluate(
     future_detected = detected & set(rule_context.future_parts)
     if future_detected:
         names = _display(future_detected, rule_context.display_names)
-        return _decision(
-            step,
-            DecisionStatus.BLOCK,
-            f"Incorrect assembly order: {names} belongs to a later step. "
-            f"Remove it and complete {step.name} first.",
-            checked,
-        )
+        skipped = expected - detected
+        if skipped:   # e.g. the cover placed with no gasket under it: say what is missing
+            missing_names = _display(skipped, rule_context.display_names)
+            message = (f"Incorrect assembly order: {names} placed before {missing_names}. "
+                       f"Remove {names}, add {missing_names}, then inspect {step.name} again.")
+        else:
+            message = (f"Incorrect assembly order: {names} belongs to a later step. "
+                       f"Remove it and complete {step.name} first.")
+        return _decision(step, DecisionStatus.BLOCK, message, checked)
 
     unknown_detected = (
         detected - set(rule_context.known_parts) if rule_context.known_parts else set()

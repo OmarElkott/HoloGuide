@@ -153,7 +153,7 @@ def main():
     st.caption(f'Inspector: {type(session.workflow.inspector).__name__}; '
                f'model: {session.model or "not configured"}; endpoint: {session.endpoint or "none configured"}. '
                'Network activity is not monitored. Localhost inference does not establish absence of other traffic.')
-    if st.button('Run scripted mock demo'):
+    if session.mode == 'mock' and st.button('Run scripted mock demo'):
         if st.session_state.get('demo'):
             st.session_state.demo.close()
         st.session_state.demo = DemoController()
@@ -166,8 +166,9 @@ def main():
         from src.dashboard.live_line_panel import live_line_active, show_live_line
         from src.dashboard.scenario_launcher import show_launcher
         show_live_line(st, session)
-        if not live_line_active(session):
-            show_launcher(st, session)
+        if not live_line_active(session) and session.mode == 'real':
+            with st.expander('Single-step scenario launcher (manual, one inspection per click)'):
+                show_launcher(st, session)
         runner = getattr(session, 'scenario_runner', None)
         show_session(session, controls=(runner is None or runner.done) and not live_line_active(session))
 

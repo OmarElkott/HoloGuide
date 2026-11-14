@@ -138,7 +138,9 @@ def test_dashboard_live_line_stops_and_operator_restarts(monkeypatch, tmp_path):
     from pathlib import Path
     from streamlit.testing.v1 import AppTest
     import src.dashboard.live_line_panel as panel
+    from src.dashboard.offline_check import OfflineReport
     monkeypatch.setattr(panel, 'FPS', 1000)
+    monkeypatch.setattr(panel, 'run_check', lambda *a, **k: OfflineReport(True, True, False, ['stub']))
     monkeypatch.setenv('HOLOGUIDE_BACKEND_FACTORY', 'tests.test_live_monitor:real_cv_session')
     app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'src/dashboard/app.py'), default_timeout=120)
     app.run()
@@ -150,3 +152,141 @@ def test_dashboard_live_line_stops_and_operator_restarts(monkeypatch, tmp_path):
     next(t for t in app.text_input if t.label == 'Operator identifier').input('operator-1').run()
     next(b for b in app.button if b.label.startswith('Acknowledge the interlock')).click().run()
     assert any('Assembly complete' in s.value for s in app.success)
+
+
+# ---- E-stop, handoff, scripted operator, shift, AI outage ------------------------------------
+
+def test_estop_freezes_mid_motion_and_needs_operator_and_reason(tmp_path):
+    env, m = monitor(tmp_path, 'correct')
+    with env:
+        for _ in range(4):
+            m.tick()
+        assert m.anim is not None                                  # the plate is mid-drop
+        m.estop('operator-1', 'Hand in the cell')
+        frozen = [m.tick() for _ in range(5)]
+        assert all(f.line == 'stopped' for f in frozen) and m.anim is not None
+        assert m.available_actions() == ['release_estop']
+        with pytest.raises(ValueError):
+            m.release_estop('operator-1', ' ')
+        m.release_estop('operator-1', 'Cell clear')
+        while m.line == 'running':
+            m.tick()
+        assert m.line == 'complete' and m.estops == 1 and not m.caught and m.false_stops == 0
+    events = [e['event_type'] for e in m.workflow.audit.read_all()]
+    assert 'emergency_stop' in events and 'estop_released' in events
+
+
+def test_handoff_line_names_who_contributed(tmp_path):
+    from src.vision.foreign_objects import Identification
+    from src.vision.hybrid_inspector import HybridInspector
+
+    class Ident:
+        def identify(self, image_path, box):
+            return Identification('tool', 'purple screwdriver')
+
+    class NoGemma(InspectorABC):
+        def inspect(self, image_path, step):
+            raise AssertionError('not needed')
+    inspector = HybridInspector(CFG, CVInspector(CFG), NoGemma(), identifier=Ident())
+    env, m = monitor(tmp_path, 'foreign_object', inspector)
+    with env:
+        run_until_stop(m)
+        assert m.handoff.startswith("OpenCV: unrecognised object -> Gemma: 'purple screwdriver (tool)'")
+        assert m.handoff.endswith('-> rules: BLOCK') and m.caught
+
+
+def test_scripted_operator_is_labelled_on_screen(tmp_path):
+    from src.simulation.live_monitor import scripted_action
+    env, m = monitor(tmp_path, 'wrong_cover')
+    with env:
+        run_until_stop(m)
+        assert scripted_action(m).startswith('SCRIPTED OPERATOR')
+        assert m.banner.startswith('SCRIPTED OPERATOR') and m.frames < m.banner_until
+
+
+def test_shift_counts_faults_and_never_lets_one_escape(tmp_path):
+    from src.simulation.live_monitor import run_shift
+    shift, frames = run_shift(CFG, Recorder(), tmp_path / 'shift', units=6, fault_rate=0.7, seed=3)
+    k = shift.kpis()
+    assert k['units_completed'] == 6 and k['faults_injected'] >= 1
+    assert k['faults_caught'] == k['faults_injected'] and k['faults_escaped'] == 0 and k['false_stops'] == 0
+    assert k['units_per_hour'] > 0 and frames
+
+
+def test_ai_outage_hybrid_keeps_known_parts_and_reviews_foreign_objects(tmp_path):
+    from src.vision.foreign_objects import Identification
+    from src.vision.hybrid_inspector import HybridInspector
+    from src.vision.outage import ai_outage_active, set_ai_outage
+
+    class Ident:
+        def identify(self, image_path, box):
+            return Identification('tool', 'screwdriver')
+    inspector = HybridInspector(CFG, CVInspector(CFG), Recorder(), identifier=Ident())
+    assert set_ai_outage(inspector, True) and ai_outage_active(inspector)
+    env, m = monitor(tmp_path, 'foreign_object', inspector)
+    with env:
+        run_until_stop(m)
+        assert m.decisions == ['pass', 'pass', 'needs_review']     # never PASS without Gemma
+        assert 'AI OUTAGE' in m.workflow.last_decision.observation.rationale
+    set_ai_outage(inspector, False)
+    assert not ai_outage_active(inspector) and isinstance(inspector.identifier, Ident)
+
+
+def test_ai_outage_gemma_first_holds(tmp_path):
+    from src.vision.gemma_first_inspector import GemmaFirstInspector
+    from src.vision.outage import set_ai_outage
+    inspector = GemmaFirstInspector(CFG, Recorder(), CVInspector(CFG))
+    set_ai_outage(inspector, True)
+    env, m = monitor(tmp_path, 'correct', inspector)
+    with env:
+        run_until_stop(m)
+        assert m.decisions == ['hold'] and m.holds == 1
+
+
+def test_outage_switch_refuses_inspectors_without_gemma():
+    from src.vision.outage import set_ai_outage
+    assert set_ai_outage(CVInspector(CFG), True) is False
+
+
+def test_dashboard_whole_shift_shows_kpis(monkeypatch):
+    from pathlib import Path
+    from streamlit.testing.v1 import AppTest
+    import src.dashboard.live_line_panel as panel
+    from src.dashboard.offline_check import OfflineReport
+    monkeypatch.setattr(panel, 'FPS', 1000)
+    monkeypatch.setattr(panel, 'OPERATOR_DELAY_S', 0.005)
+    monkeypatch.setattr(panel, 'run_check', lambda *a, **k: OfflineReport(True, True, False, ['stub']))
+    monkeypatch.setenv('HOLOGUIDE_BACKEND_FACTORY', 'tests.test_live_monitor:real_cv_session')
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'src/dashboard/app.py'), default_timeout=300)
+    app.run()
+    next(s for s in app.selectbox if s.label == 'Operation').set_value('Real').run()
+    next(b for b in app.button if b.label.startswith('Start selected mode')).click().run()
+    assert any('OFFLINE VERIFIED' in s.value for s in app.success)
+    assert not any(b.label == 'Run scripted mock demo' for b in app.button)
+    next(r for r in app.radio if r.label == 'Run').set_value('Whole shift').run()
+    next(n for n in app.number_input if n.label == 'Units').set_value(3).run()
+    next(b for b in app.button if b.label == 'Start line').click().run()
+    for _ in range(20):                  # a browser follows st.rerun() between chunks; AppTest needs a nudge
+        if any('Line complete' in s.value for s in app.success):
+            break
+        app.run()
+    metrics = {m.label: m.value for m in app.metric}
+    assert metrics['Units done'] == '3/3' and metrics['Faults escaped'] == '0'
+    assert any('Line complete' in s.value for s in app.success)
+
+
+def test_estop_halts_a_scripted_shift_until_a_human_releases_it(tmp_path):
+    from src.simulation.live_monitor import Shift
+    with AssemblyEnv(CFG, seed=0) as env:
+        shift = Shift(CFG, env, Recorder(), AuditLog(tmp_path / 'a.jsonl'), tmp_path / 's', units=2,
+                      fault_rate=0.0, scripted_operator=True)
+        for _ in range(5):
+            shift.tick()
+        shift.estop('operator-1', 'Hand in the cell')
+        for _ in range(60):                       # far longer than the scripted operator's delay
+            shift.tick()
+        assert shift.line == 'stopped' and shift.available_actions() == ['release_estop']
+        shift.release_estop('operator-1', 'Cell clear')
+        while shift.line != 'complete':
+            shift.tick()
+        assert shift.kpis()['estops'] == 1 and shift.kpis()['units_completed'] == 2
