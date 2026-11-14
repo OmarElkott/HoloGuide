@@ -1,207 +1,188 @@
-> **Status (2026-11-13):** complete and integrated. Real PyBullet simulation, OpenCV / Gemma 3 4B / Hybrid /
-> Gemma-first inspectors, foreign-object identification, rules, workflow, audit log, Real-mode dashboard and a
-> measured evaluation on held-out datasets. Measured results and the go/no-go reasoning: `docs/decisions.md`.
-> Walk-through with real outputs: `notebooks/hologuide_demo.ipynb`. All results are on synthetic renders.
-
 # HoloGuide
-A locally powered AI assembly system that verifies manufacturing steps and catches defects
 
-## Core idea
-- AI observes the virtual assembly through simulated camera images.
-- Fixed rules validate each step and prevent incorrect progression.
-- The dashboard explains missing or incorrect parts and confirms corrections.
-- The operator can inspect system decisions and override when appropriate.
+**Local AI assembly verification for the shop floor: the AI reports, deterministic rules decide, people stay in control.**
 
-## Scope
-- One virtual assembly
-- Four assembly steps
-- Three mistake types: missing part, wrong part, incorrect order
-- Plus foreign objects (a tool or rag left in the work area): OpenCV finds *where*, Gemma says *what*, the rules block
-- Local AI inspection
-- Dashboard-based operator workflow
+HoloGuide watches a simulated assembly line build a 4-step *Sealed Cover Assembly*: base plate → gasket → cover →
+bolts. It catches mistakes before a unit moves on. Everything runs **offline on one laptop**: Gemma 3 4B is served
+locally by Ollama, and nothing is downloaded or sent anywhere during operation.
 
-## Team roles
-- Simulation and assembly interaction
-- AI inspection and image testing
-- Workflow rules, dashboard, and integration
+It catches four kinds of mistake:
 
-## Development and tests
+| Mistake | Example | Who catches it |
+|---|---|---|
+| Missing part | Cover placed with no gasket under it | AI evidence → rules |
+| Wrong part | Green decoy cover instead of the blue one | AI evidence → rules |
+| Wrong order | Gantry tries to place the cover at step 1 | **Order guard refuses the pick before anything moves** (no AI); a later part already in the image → AI evidence → rules |
+| Foreign object | Screwdriver, wrench or rag left in the work area | OpenCV finds *where*, Gemma says *what* → rules |
 
-Use Python 3.11 or 3.12. From the repository root:
+Built for the GDG Windsor *Build with AI: Smart Automation, Robotics, and Vision* hackathon (DevFest 2026 track).
+All results are on **synthetic PyBullet renders** by design.
 
-Full install check on this Windows/Python 3.12 host selected a PyBullet source
-build and failed because Microsoft Visual C++ 14.0+ Build Tools were absent.
-The mock-development install below avoids PyBullet. For the full simulator setup,
-use the team's Python 3.11 environment with a compatible wheel or install the
-required C++ toolchain, then repeat the full install; that path is not verified here.
+## Architecture
 
-```powershell
-python -m venv .venv
-.venv/Scripts/python -m pip install -r requirements.txt
-.venv/Scripts/python -m pytest -q
+```mermaid
+flowchart LR
+    subgraph Line["Simulated line (PyBullet)"]
+        G[Gantry places parts] --> W["Motion watchdog<br/>(deterministic)"]
+    end
+    W -- "settled frame (PNG path only)" --> I
+    subgraph AI["Local AI on the laptop (offline)"]
+        I{Inspector}
+        CV["OpenCV<br/>known parts + WHERE is<br/>anything unrecognised"]
+        GM["Gemma 3 4B via Ollama<br/>reads the frame, names<br/>unknown objects (WHAT)"]
+        I --- CV
+        I --- GM
+    end
+    I -- "Observation (evidence only)" --> R["Rules engine<br/>(pure function)"]
+    R -- "PASS / BLOCK / REVIEW / HOLD" --> WF["Workflow state machine<br/>+ line interlock"]
+    WF -- "release next pick only on PASS" --> G
+    OP(["Operator"]) -- "correct / acknowledge /<br/>override + typed reason / E-STOP" --> WF
+    WF --> A[("Audit log (JSONL)")]
 ```
 
-For control, evaluation and mock dashboard development without PyBullet/Ollama:
+**Core rules of the design**
+- **The AI reports, the rules decide.** Inspectors return an `Observation` (parts seen, foreign objects, confidence,
+  one-sentence rationale). Only the rules engine turns it into a `Decision`, and only the workflow advances a step.
+- **Fixed rule priority:** foreign object → wrong order → wrong or decoy part → missing part → confidence threshold
+  (0.70) → PASS. Any AI failure or timeout (20 s) gives **HOLD**. Low confidence gives **NEEDS REVIEW**.
+  Neither can ever pass.
+- **People stay in control.** Overrides need an operator ID and a typed reason. The **E-STOP** freezes the line at
+  any time. Removing a verified part revokes its approval. Every event goes to the audit log.
+- **Trust boundary:** the inspector only ever receives an image path and the step spec. Labels and simulator ground
+  truth never reach the AI.
 
-```powershell
-.venv/Scripts/python -m pip install pytest pydantic pyyaml streamlit
-.venv/Scripts/python -m pytest -q
-.venv/Scripts/python -m streamlit run src/dashboard/app.py
+## What Gemma does
+
+Gemma 3 4B (4-bit, about 2.9 GB of VRAM) has three jobs:
+
+1. **Reads the frame** (`GemmaInspector`). It answers one yes/no question per colour; code maps the answers to parts.
+   The prompt never says which step it is, so the model can't "see" what should be there.
+2. **Names foreign objects** (`ForeignObjectIdentifier`). OpenCV finds pixels that match no known part, and Gemma
+   is shown only a close-up crop of them. It answers tool, cloth, debris, part of the assembly, or unclear.
+3. **Explains** (optional, text only).
+
+You choose how much Gemma leads with an **inspector factory**:
+
+| Factory | Who reads each frame | Notes |
+|---|---|---|
+| `src.vision.factories:gemma_first` | **Gemma reads every frame**; OpenCV can only send a disagreement to review | Default for the demo |
+| `src.vision.factories:hybrid` | OpenCV reads every frame; Gemma for unclear parts and unknown objects | Fastest; default for evaluation |
+| `src.vision.factories:gemma` | Gemma alone | Baseline, not safe on its own |
+| `src.vision.factories:cv` | OpenCV alone | Baseline, can't name objects |
+
+## Key results (real Gemma, measured)
+
+Full tables, method, caveats and reproduce commands: **[`docs/decisions.md`](docs/decisions.md)**.
+
+**Held-out dataset v3** (130 images: 40 correct, 10 of each original mistake type, 60 foreign objects):
+
+| Inspector | Correct | Wrong order | Foreign object | False blocks | Mistakes that passed | Median latency |
+|---|---:|---:|---:|---:|---:|---:|
+| OpenCV alone | 100% | 100% | 0% (all 60 sent to review) | 0% | 0 | 0.016 s |
+| Gemma alone | 85% | 60% | 47% | 15% | **36** | 2.8 s |
+| **Hybrid** | **100%** | **100%** | **100%** | **0%** | **0** | 0.024 s |
+| Gemma-first | 85% | 60% | 100% | 0% | **0** (11 images sent to review overall) | 3.0 s |
+
+**20-unit simulated shift on the live line** (seed 2026, 8 injected faults, scripted operator):
+
+| Inspector | Faults caught | Escaped | False stops | Mean cycle | Units/hour (simulated) |
+|---|---:|---:|---:|---:|---:|
+| Hybrid | 8/8 | 0 | 0 | 7.8 s | 462 |
+| Gemma-first | 8/8 | 0 | 0 | 19.6 s | 184 |
+
+**What this shows:** Gemma alone isn't safe enough to decide, and OpenCV alone can't tell what an unknown object is.
+Combined under deterministic rules, no mistake image passed on either dataset. Gemma's object *names* are a hint
+for the operator (right in 28 of 60 cases); the *block* doesn't depend on them.
+
+## Quick start
+
+Requires Python 3.10+, [Ollama](https://ollama.com), and an NVIDIA GPU for interactive speed. CPU works, more slowly.
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+ollama pull gemma3:4b                 # once, while online; the demo never downloads anything
+.venv/bin/python -m pytest -q         # 282 tests, no GPU or Ollama needed
 ```
 
-Tests use temporary files. Shared Person 4 fixtures live in `tests/conftest.py`.
-The dashboard defaults to existing control mocks and production Workflow. Place the current part, inspect,
-correct faults, or submit an override with an operator identifier and typed reason.
-Removing a verified part invalidates its approval through Workflow first.
-Each demo session has its own persisted audit under ignored `outputs/dashboard/`.
-Reset closes supported environment resources and retains old audit files. The
-camera panel displays the current rendered image or an explicit unavailable/mock
-placeholder. The last inspected image and step remain distinct from the current
-workflow step. The audit viewer supports event filters and JSONL download.
-Project Streamlit telemetry is disabled; network availability is not monitored.
+On Windows, use `.venv\Scripts\python.exe` in place of `.venv/bin/python`.
 
-`Run scripted mock demo` executes the existing four scenario loops, followed by
-low-confidence review, an injected mock TimeoutError, HOLD recovery, reinspection,
-and a clearly labelled logged demonstration override. Episodes have separate
-workflows and audits. Progress updates automatically; Stop halts between episodes
-and reset releases resources. This is not a real-model timeout benchmark or the
-final three-minute hardware rehearsal. The scenario transcripts retain the
-mistakes, correction messages, reinspection and completion events.
+### Run the demo (dashboard, Real mode)
 
-Real mode never falls back to mocks. The built-in factory is
-`HOLOGUIDE_BACKEND_FACTORY=src.simulation.backend:create_session` with
-`HOLOGUIDE_INSPECTOR_FACTORY=src.vision.factories:hybrid` (or `gemma_first`, `gemma`, `cv`);
-`bash scripts/run_video_demo.sh` checks Ollama and the local model (it never pulls one), warms Gemma
-up and opens the dashboard in Real mode. The dashboard consumes `render_to_file(path)`, `place_part`,
-`remove_part`, and `close` only; it never calls `parts_present()` or passes simulation truth to
-inspection. The rendered scenario launcher includes `foreign_object` (a screwdriver left on the cover).
-
-**Live line monitor** (Real mode panel, or `python -m src.simulation.live_monitor --inspector-factory
-src.vision.factories:hybrid --output outputs/live/run1` for an MP4): a simulated gantry lowers each part into place
-while HoloGuide watches. A deterministic motion watchdog inspects only when the scene is still; a BLOCK, review,
-HOLD or a pick refused by the order guard stops the line, and only an operator action (correction, acknowledgement,
-logged override with a reason, cleared hold) restarts it. The panel also has an **E-STOP**, a **whole-shift** mode with a
-KPI board (faults caught / escaped / false stops / units per hour; `--shift 20` on the CLI), a **simulated AI
-outage** toggle, and an **offline self-test** badge (local endpoint, model on disk, no internet route).
-
-## Evaluation
-
-Datasets are generated, not committed (`outputs/` is ignored):
-`python -m src.simulation.dataset --output outputs/dataset-v2 --randomize --seed 2026` (200 images) and
-`--output outputs/dataset-v3 --randomize --seed 3030 --correct 40 --per-fault 10 --foreign 60`
-(130 images incl. foreign objects). Do not treat mock test outcomes as model performance.
-The manifest format is:
-
-```csv
-image_path,step_id,mistake_type,expected_status
+```bash
+bash scripts/run_video_demo.sh        # checks Ollama + model, warms Gemma, runs the offline self-test, opens the dashboard
+HOLOGUIDE_INSPECTOR_FACTORY=src.vision.factories:hybrid bash scripts/run_video_demo.sh   # faster hybrid
 ```
 
-Paths are relative to the manifest; step IDs reference `config/assembly.yaml`.
-Use actual case labels for `mistake_type`; expected status is `pass`, `block`,
-`needs_review`, or `hold`. Each case is evaluated independently, not as a sequential
-workflow.
-Only image path and StepSpec are passed to the inspector; scoring labels stay in
-the runner. The inspector implementation must also avoid reading label metadata.
+In the browser: **Operation → Real → Start selected mode / reset session**, then go to the **Live line monitor**:
 
-```powershell
-.venv/Scripts/python -m src.evaluation.runner path/to/manifest.csv --output outputs/evaluation/run-01.csv
+- **Single scenario:** `correct`, `missing_gasket`, `wrong_cover`, `wrong_order` or `foreign_object`. When the line
+  stops, enter an operator ID and choose the action shown: correct the fault, acknowledge, override with a reason,
+  or clear a hold.
+- **Whole shift:** N units with seeded random faults and a live KPI board (faults caught / escaped / false stops /
+  units per hour).
+- **E-STOP:** freezes the gantry. Releasing it needs an operator ID and a typed reason.
+- **Simulate AI outage:** Gemma becomes unreachable. The line stops for review or hold and never passes.
+- **Offline self-test badge:** checks that the endpoint is on localhost, that the model is on disk, and that there
+  is no internet route. With Wi-Fi off it shows **OFFLINE VERIFIED**.
+
+### Command line
+
+```bash
+# Live line, all 5 scenarios -> MP4 with overlays (operator actions scripted and labelled on screen)
+.venv/bin/python -m src.simulation.live_monitor --inspector-factory src.vision.factories:hybrid --output outputs/live/run1
+
+# A 20-unit shift -> MP4 + KPIs
+.venv/bin/python -m src.simulation.live_monitor --shift 20 --seed 2026 \
+    --inspector-factory src.vision.factories:gemma_first --output outputs/live/shift1
+
+# Generate a labelled dataset and evaluate an inspector on it
+.venv/bin/python -m src.simulation.dataset --output outputs/dataset-v3 --randomize --seed 3030 \
+    --correct 40 --per-fault 10 --foreign 60
+.venv/bin/python -m src.evaluation.runner outputs/dataset-v3/labels.csv \
+    --inspector-factory src.vision.factories:hybrid --model gemma3:4b --output outputs/evaluation/hybrid-v3.csv
 ```
 
-The CLI uses the existing `control.cli.MockInspector`, which requires mock JSON
-snapshots produced by `MockAssemblyEnvironment`; it does not accept camera PNGs.
-For a real implementation call `src.evaluation.runner.run(manifest, inspector,
-config, output)` with an object implementing `inspect(image_path, step)`.
-The runner refuses to overwrite existing artifacts. It writes per-case CSV,
-`.summary.json`, and `.tables.md` beside the selected output in ignored `outputs/`.
-New runs also save `.provenance.json` with manifest/image hashes, configuration,
-code revision and dirty state, inspector/model, environment and package versions.
-Hardware measurements and model digest must be recorded on the demo laptop.
-Accuracy is exact decision-status agreement grouped by ground-truth mistake type.
-False-block rate is BLOCK / ground-truth PASS cases (undefined when no eligible
-cases). HOLD/review counts and inspection exceptions are reported separately;
-failed cases remain in accuracy denominators. Latency measures inspection,
-validation, and rule evaluation, excluding artifact writes; p95 uses linear
-interpolation. Mock latency is not model latency.
+Output paths must be new, because the tools never overwrite earlier runs. Each evaluation writes a CSV, a summary,
+tables and a provenance file (dataset and image hashes, config, code revision, model and package versions).
+Generated files live in `outputs/`, which is git-ignored.
 
-Regenerate tables from existing CSVs without rerunning inspection:
+### Notebook
 
-```powershell
-.venv/Scripts/python -m src.evaluation.report --result "Mock validation=outputs/evaluation/run-01.csv" --output outputs/evaluation/report-01.md
-# When actual corresponding results exist:
-.venv/Scripts/python -m src.evaluation.report --result "Gemma only=outputs/evaluation/gemma.csv" --result "OpenCV only=outputs/evaluation/opencv.csv" --result "Hybrid=outputs/evaluation/hybrid.csv" --output outputs/evaluation/comparison.md
+[`notebooks/hologuide_demo.ipynb`](notebooks/hologuide_demo.ipynb) walks through the whole pipeline with saved
+real-Gemma outputs: inspection, rules, workflow and audit log, edge cases, foreign objects, the live-line shift, and
+the results tables. On Kaggle it clones this repo by itself. Gemma cells show N/A where there is no local Ollama.
+
+## Project layout
+
+```
+config/assembly.yaml       parts, steps, camera, confidence threshold (0.70), AI timeout (20 s)
+src/simulation/            PyBullet scene, scenarios, dataset generator, live line monitor + shift
+src/vision/                OpenCV, Gemma, Hybrid, Gemma-first inspectors; foreign-object identifier; AI-outage switch
+src/control/               rules engine, workflow state machine, audit log
+src/dashboard/             Streamlit dashboard, live line panel, offline self-test
+src/evaluation/            evaluation runner, metrics, provenance, reports
+tests/                     282 tests (no GPU or Ollama needed)
+docs/decisions.md          measured results, design decisions, reproduce commands
 ```
 
-Unavailable measurements are N/A. Different manifest hashes trigger a comparison
-warning. `--recovery path.json` and `--safety path.json` attach actual P1/P3 evidence
-without guessing their unagreed output schemas. Legacy CSVs remain readable but
-are labelled as lacking provenance. Explicit TimeoutError exceptions are counted
-as timeouts; a zero-confidence observation or HOLD alone does not prove a timeout.
+## Limitations
 
-Final evaluation remains blocked by P1's dataset/manifest and finished simulation,
-P2's configured real inspectors, and the target laptop/model installation. Once
-the provisional manifest adapter has been confirmed, the command template is:
+- Simulation only. The renders are clean, and the OpenCV thresholds are tuned to them, so a physical camera
+  would need recalibration.
+- The gantry is an animation, not a physics-based robot. Faults are scripted mis-picks.
+- Cycle times are *simulated* line time: they show relative cost, not a real factory rate.
+- The operator identifier is free text, with no login.
+- Gemma's foreign-object names are hints (28/60 correct). The block depends only on the object kind.
 
-```powershell
-.venv/Scripts/python -m src.evaluation.runner path/to/confirmed-manifest.csv --inspector-factory your_team_module:create_gemma_inspector --step-id-interface --model gemma3:4b --endpoint http://localhost:11434 --output outputs/evaluation/eval_final.csv
-```
+## Team
 
-Replace the factory with the agreed real factory; omit `--step-id-interface` if
-it already accepts StepSpec. Repeat for actual OpenCV/Hybrid inspectors with unique
-output paths, then generate the comparison report. No such factories or dataset
-are claimed to ship here. All failures remain in results; the runner relies on
-P2's bounded timeout implementation and does not create a competing timeout engine.
-
-### Partner 2 inspector factories
-
-The vision module now ships zero-argument factories in `src/vision/factories.py`
-(no `--step-id-interface` needed; all accept a StepSpec):
-
-| Factory | Inspector |
+| Partner | Area |
 |---|---|
-| `src.vision.factories:cv` | OpenCV colour masks + shape checks (no GPU, ~15 ms) |
-| `src.vision.factories:gemma` | Gemma 3 4B via local Ollama, wrapped in `ai_timeout_s` |
-| `src.vision.factories:hybrid` | OpenCV decides; Gemma only settles images OpenCV is unsure about |
+| Partner 1 | Simulation, datasets, scenarios, demo ([technical notes](docs/PARTNER1_TECHNICAL.md)) |
+| Partner 2 | Vision and local AI inspection ([vision module](docs/VISION_MODULE.md)) |
+| Partner 3 | Rules, workflow, audit ([final report](docs/FINAL_PARTNER3_REPORT.md)) |
+| Partner 4 | Dashboard and evaluation |
 
-```powershell
-.venv/Scripts/python -m src.simulation.dataset --output outputs/dataset-v1
-.venv/Scripts/python -m src.evaluation.runner outputs/dataset-v1/labels.csv --inspector-factory src.vision.factories:hybrid --model gemma3:4b --endpoint http://localhost:11434 --output outputs/evaluation/hybrid-v1.csv
-.venv/Scripts/python -m src.vision.latency_benchmark outputs/dataset-v1/labels.csv --output outputs/benchmark/vis12 --inspectors cv,gemma,hybrid
-$env:HOLOGUIDE_BACKEND_FACTORY = 'src.simulation.backend:create_session'
-$env:HOLOGUIDE_INSPECTOR_FACTORY = 'src.vision.factories:hybrid'   # dashboard real mode
-```
-
-Measured results and the go/no-go choice are in `docs/decisions.md`; module details
-in `docs/VISION_MODULE.md`; the writeup section is `docs/WRITEUP_AI_INSPECTION.md`.
-
-The public notebook `notebooks/hologuide_demo.ipynb` is saved with outputs. To re-run it top to bottom
-(uses Hybrid if a local Ollama serves `gemma3:4b`, otherwise OpenCV; never downloads a model):
-
-```powershell
-.venv/Scripts/python -m pip install nbconvert ipykernel
-.venv/Scripts/python -m jupyter nbconvert --to notebook --execute notebooks/hologuide_demo.ipynb --output-dir outputs/notebook-run
-```
-
-Measured results, trade-offs and reproduce commands: `docs/decisions.md`.
-
-## Partner 1 rendered simulation contribution
-
-See [simulation, dataset and recovery documentation](docs/PARTNER1_TECHNICAL.md).
-
-![HoloGuide architecture](docs/architecture.png)
-
-### Windows / Python 3.11
-
-Open PowerShell in the repository. Python 3.11 and Git are prerequisites.
-The following installation command downloads packages; run it only when network use is authorized.
-
-```powershell
-py -3.11 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m src.simulation.dataset --output outputs/dataset-v2 --randomize --seed 2026
-.\.venv\Scripts\python.exe -m streamlit run src/dashboard/app.py
-```
-
-Using the executable directly avoids PowerShell activation-policy problems. Installation and model provisioning require internet, but rendering and tests use local resources. Provision the chosen real model before disconnecting Wi-Fi. Do not download or pull a model during the offline demo. Follow the real-inspector factory instructions in the technical guide; no Partner 2 inspector currently ships on these integrated branches. The existing mock CLI remains available as `python -m src.control.cli --scenario missing_gasket` and is not AI inference.
-
-Roles: Partner 1 owns simulation, datasets, scenarios, recovery testing and demo preparation; Partner 2 owns vision/model inspection; Partner 3 owns rules, workflow and audit; Partner 4 owns dashboard and evaluation reporting. This contribution extends Partner 4's dashboard/evaluation seams and retains Partner 3's authorization logic.
+The plan and task IDs are in [`HOLOGUIDE_ROADMAP.md`](HOLOGUIDE_ROADMAP.md). Contributor notes for AI coding
+assistants are in [`CLAUDE.md`](CLAUDE.md).
