@@ -184,5 +184,4 @@ docs/decisions.md          measured results, design decisions, reproduce command
 | Partner 3 | Rules, workflow, audit ([final report](docs/FINAL_PARTNER3_REPORT.md)) |
 | Partner 4 | Dashboard and evaluation |
 
-The plan and task IDs are in [`HOLOGUIDE_ROADMAP.md`](HOLOGUIDE_ROADMAP.md). Contributor notes for AI coding
-assistants are in [`CLAUDE.md`](CLAUDE.md).
+The plan and task IDs are in [`HOLOGUIDE_ROADMAP.md`](HOLOGUIDE_ROADMAP.md).
