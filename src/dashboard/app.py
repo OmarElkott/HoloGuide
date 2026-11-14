@@ -163,10 +163,13 @@ def main():
                    'injected timeout, recovery, and a logged demonstration override. No real model timing.')
         play_demo()
     else:
+        from src.dashboard.live_line_panel import live_line_active, show_live_line
         from src.dashboard.scenario_launcher import show_launcher
-        show_launcher(st, session)
+        show_live_line(st, session)
+        if not live_line_active(session):
+            show_launcher(st, session)
         runner = getattr(session, 'scenario_runner', None)
-        show_session(session, controls=runner is None or runner.done)
+        show_session(session, controls=(runner is None or runner.done) and not live_line_active(session))
 
 
 if __name__ == '__main__':

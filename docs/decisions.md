@@ -147,6 +147,36 @@ The screwdriver is removed, the step is re-inspected, and it passes. Run with re
 `gemma_first` completed and recovered. The block message was "Foreign object in the work area: purple screwdriver
 (tool)".
 
+## Live line monitor (added 2026-11-13)
+
+`src/simulation/live_monitor.py` with a Real-mode dashboard panel. It answers the rubric's "motion, safety stops"
+examples while staying in simulation.
+
+- **Motion.** A scripted gantry lowers each part from 0.30 m over 10 frames. Removals lift the part away the same way.
+- **Watchdog** (deterministic). Consecutive frames are compared. While anything moves there is no inspection; after
+  3 still frames, the settled frame is saved and passed, as a path only, to `Workflow.request_inspection`.
+  The AI never decides when to look.
+- **Interlock.**
+  - Every pick goes through `Workflow.check_action`, so the order guard can refuse a pick before anything moves.
+  - The next step's picks start only after a PASS.
+  - BLOCK, NEEDS_REVIEW, HOLD or a refused pick stop the line. It restarts only through an operator action:
+    correct the fault, acknowledge the interlock, override with a typed reason, or clear the hold. All of these
+    go through `Workflow`, and `line_stopped` / `line_restarted` events are audited.
+- **Faults** are scripted gantry mis-picks: the cover before the gasket, the green decoy, the cover at step 1
+  (refused by the guard), and a screwdriver left on the cover.
+- **Measured with real Gemma** (Hybrid + identifier, `outputs/live/hybrid-run1`; the operator was scripted):
+  every scenario completed, and each fault stopped the line and recovered after the correction.
+
+  | Scenario | Decisions in order |
+  |---|---|
+  | correct | pass, pass, pass, pass |
+  | missing_gasket | pass, **block**, pass, pass, pass |
+  | wrong_cover | pass, pass, **block**, pass, pass |
+  | wrong_order | **pick refused by interlock**, then pass ×4 |
+  | foreign_object | pass, pass, **block** ("purple screwdriver (tool)"), pass, pass |
+
+  With OpenCV alone, the foreign object stops the line as NEEDS_REVIEW instead, because the object can't be named.
+
 ## Known limitations
 
 - The renders are clean and synthetic. OpenCV's 100% depends on the distinct part colours and the fixed, shadow-free lighting. Its thresholds (`CVSettings`) were checked on both datasets: present parts cover at least 0.37% of the image and absent parts 0.00%. A real camera would need recalibration.

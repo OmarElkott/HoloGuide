@@ -76,6 +76,12 @@ up and opens the dashboard in Real mode. The dashboard consumes `render_to_file(
 `remove_part`, and `close` only; it never calls `parts_present()` or passes simulation truth to
 inspection. The rendered scenario launcher includes `foreign_object` (a screwdriver left on the cover).
 
+**Live line monitor** (Real mode panel, or `python -m src.simulation.live_monitor --inspector-factory
+src.vision.factories:hybrid --output outputs/live/run1` for an MP4): a simulated gantry lowers each part into place
+while HoloGuide watches. A deterministic motion watchdog inspects only when the scene is still; a BLOCK, review,
+HOLD or a pick refused by the order guard stops the line, and only an operator action (correction, acknowledgement,
+logged override with a reason, cleared hold) restarts it.
+
 ## Evaluation
 
 Datasets are generated, not committed (`outputs/` is ignored):

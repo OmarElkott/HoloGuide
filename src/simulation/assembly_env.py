@@ -74,6 +74,13 @@ class AssemblyEnv:
 
     def render_to_file(self, path: str) -> str:
         """Capture and save an RGB image from the virtual camera."""
+        output = Path(path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        Image.fromarray(self.render_rgb()).save(output)
+        return str(output)
+
+    def render_rgb(self) -> np.ndarray:
+        """Capture one RGB frame (height x width x 3, uint8) without writing a file."""
         camera = self.config.camera
 
         _, _, rgba, _, _ = p.getCameraImage(
@@ -87,15 +94,7 @@ class AssemblyEnv:
         )
 
         image = np.asarray(rgba, dtype=np.uint8)
-        image = image.reshape(
-            camera.height, camera.width, 4
-        )[:, :, :3]
-
-        output = Path(path)
-        output.parent.mkdir(parents=True, exist_ok=True)
-        Image.fromarray(image).save(output)
-
-        return str(output)
+        return image.reshape(camera.height, camera.width, 4)[:, :, :3].copy()
 
     
     def place_part(self, part: str) -> None:
@@ -261,15 +260,23 @@ class AssemblyEnv:
         if p.isConnected(self.client):
             p.disconnect(physicsClientId=self.client)
 
-    def offset_part(self, part: str, dx: float, dy: float) -> None:
-        """Translate an entire component for an explicitly injected alignment fault."""
+    def offset_part(self, part: str, dx: float, dy: float, dz: float = 0.0) -> None:
+        """Translate an entire component (alignment faults; dz animates the line gantry)."""
         if part not in self._parts:
             raise ValueError(f"{part} is not currently placed")
-        if not np.isfinite([dx, dy]).all():
+        self._shift(self._parts[part], dx, dy, dz)
+
+    def offset_foreign_object(self, kind: str, dx: float, dy: float, dz: float = 0.0) -> None:
+        if kind not in self._foreign:
+            raise ValueError(f"{kind} is not currently placed")
+        self._shift(self._foreign[kind], dx, dy, dz)
+
+    def _shift(self, bodies, dx: float, dy: float, dz: float) -> None:
+        if not np.isfinite([dx, dy, dz]).all():
             raise ValueError("Offsets must be finite")
-        for body in self._parts[part]:
+        for body in bodies:
             position, orientation = p.getBasePositionAndOrientation(body, physicsClientId=self.client)
-            p.resetBasePositionAndOrientation(body, [position[0]+dx, position[1]+dy, position[2]],
+            p.resetBasePositionAndOrientation(body, [position[0]+dx, position[1]+dy, position[2]+dz],
                                              orientation, physicsClientId=self.client)
 
     def __enter__(self):
