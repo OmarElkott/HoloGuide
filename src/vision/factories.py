@@ -20,12 +20,14 @@ from typing import Any
 if __package__ and __package__.startswith("src."):
     from ..config import AssemblyConfig, load_config
     from .cv_inspector import CVInspector
+    from .gemma_first_inspector import GemmaFirstInspector
     from .gemma_inspector import DEFAULT_MODEL, make_default_inspector
     from .hybrid_inspector import HybridInspector
     from .inspector import TimeoutInspector
 else:
     from config import AssemblyConfig, load_config
     from vision.cv_inspector import CVInspector
+    from vision.gemma_first_inspector import GemmaFirstInspector
     from vision.gemma_inspector import DEFAULT_MODEL, make_default_inspector
     from vision.hybrid_inspector import HybridInspector
     from vision.inspector import TimeoutInspector
@@ -67,3 +69,13 @@ def hybrid(config: AssemblyConfig | None = None, explain: str = "unclear") -> Hy
 def hybrid_explained(config: AssemblyConfig | None = None) -> HybridInspector:
     """Hybrid that also asks Gemma for a sentence on every image (slower; text only)."""
     return hybrid(config, explain="always")
+
+
+def gemma_first(config: AssemblyConfig | None = None) -> GemmaFirstInspector:
+    """Gemma decides every image; OpenCV can only send a disagreement to operator review.
+
+    Not wrapped in an outer timeout: the Gemma call has its own ai_timeout_s
+    (expiry gives HOLD) and the OpenCV check takes milliseconds.
+    """
+    config = config or load_config()
+    return GemmaFirstInspector(config, gemma(config), CVInspector(config))

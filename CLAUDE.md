@@ -68,3 +68,46 @@ environment.render_to_file(path) -> PNG
 - Never let the AI advance the workflow; only the rules/workflow layer may do that.
 - Run the relevant pytest files before claiming a task is complete.
 - Do not commit generated files under `outputs/` or `runs/`.
+
+## Hackathon context
+
+- **Competition:** Build with AI - Smart Automation, Robotics, and Vision (GDG Windsor Community Hackathon; sponsors GDG Windsor and DataRealm)
+- **Kaggle link:** https://www.kaggle.com/competitions/build-with-ai-smart-automation-robotics-and-vision
+- **Timeline:** started 2026-10-07; **final submission deadline Fri 2026-11-13 23:59:59 ET (EST, UTC-5)**. Kaggle has no separate Timeline tab; the dates come from the Overview page.
+- **In-person requirement:** local competition. Only participants who can answer questions about their submission in person in Windsor, Ontario on **Fri 2026-11-20** are eligible.
+- **Prizes:** DevFest 2026 Track, $1,000 CAD total (1st $500, 2nd $300, 3rd $200). Winners grant the sponsor a non-exclusive license.
+- **Theme:** pair deterministic logic (behaviour trees, state machines, rules) with VLMs (Gemma, Gemini Robotics) for judgement. Offline/on-device solutions earn extra credit. HoloGuide fits Part B idea 6 (camera-based quality and part inspection) and idea 9 (assembly assistant).
+
+### Submission format
+
+A valid submission is a **Kaggle Writeup** that includes all of the following:
+- Media Gallery
+- Attached Public Notebook
+- Attached Public Video
+- Attached Project Link
+
+Draft or unsubmitted Writeups at the deadline are not judged. Each submission enters exactly one track.
+
+### Team and submission limits
+
+- Maximum team size is **5**. The team leader can merge teams before the merge deadline. Submissions made before a merge are unsubmitted.
+- **One submission per team.**
+- One Kaggle account per person. Code may not be shared privately outside the team. Public sharing is allowed via Kaggle forums or notebooks. Open-source dependencies must use OSI-approved licenses that allow commercial use. External data, models, and tools must be reasonably accessible to everyone at minimal cost.
+
+### Evaluation (judged rubric, 100 points)
+
+Judges are a panel from GDG Windsor, DataRealm, and community partners.
+
+1. **Architecture: Deterministic Logic & AI Handoffs (30 pts)**
+   - Clear separation of concerns: deterministic logic handles what must never fail (motion, safety stops, hard alert thresholds). AI handles open-ended perception, diagnostics, and judgement.
+   - Verifiability and override: operators can inspect, verify, and override the system. Handoffs and handbacks between the AI and the control routines are explicit and safe.
+2. **Shop-Floor Deployment: On-Device, Multi-Node & Hybrid Design (25 pts)**
+   - Fully offline or single-device setups earn top marks. Multi-device local topologies are also valid.
+   - Hybrid local/cloud setups can score well only if they justify what stays local and what is offloaded, and show safe handling of latency and connectivity drops.
+3. **Industrial Impact & Technical Execution (25 pts)**
+   - Real-world viability: solves a real bottleneck in manufacturing, tooling, inspection, logistics, or agri-tech.
+   - Depth of implementation: clean, modular, functional code. For standalone or Part B tools, judges assess the robustness of the vision/log/sensor pipeline, latency performance, and day-to-day usability for a shop-floor worker.
+4. **Writeup, Demo & Architectural Justification (20 pts)**
+   - The Kaggle Writeup and Notebook clearly explain the problem, the architecture, and the exact data and control flow.
+   - Justification of trade-offs: why these models, this hardware topology, and this control structure.
+   - The video shows the system working end to end, including how it handles edge cases, faults, and unexpected inputs.
