@@ -17,6 +17,10 @@ class Scenario:
 
 
 NAMES = ('correct', 'missing_gasket', 'wrong_cover', 'wrong_order')
+# Needs an inspector that can identify foreign objects (hybrid / gemma_first with Gemma),
+# so it is kept out of NAMES, which the OpenCV-only recovery and rehearsal tools iterate.
+FOREIGN_SCENARIOS = ('foreign_object',)
+ALL_NAMES = NAMES + FOREIGN_SCENARIOS
 
 
 def get_scenario(name: str) -> Scenario:
@@ -26,6 +30,7 @@ def get_scenario(name: str) -> Scenario:
         'missing_gasket': ('base_plate', 'cover'),
         'wrong_cover': ('base_plate', 'gasket', 'wrong_cover'),
         'wrong_order': ('cover',),
+        'foreign_object': ('base_plate', 'gasket', 'cover'),   # plus a screwdriver left on the cover
     }
     if name not in scenes:
         raise ValueError(f'Unknown scenario: {name}')

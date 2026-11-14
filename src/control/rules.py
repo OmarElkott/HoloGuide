@@ -2,6 +2,8 @@
 
 Decision precedence is deliberately fail-safe:
 
+0. A foreign object (a tool, rag or debris left in the work area) is a hard
+   violation checked first, because it makes the rest of the frame unreliable (BLOCK).
 1. Explicit wrong, decoy, or out-of-order parts are hard violations (BLOCK).
 2. Explicit missing parts are hard violations (BLOCK).
 3. Failed/zero-confidence evidence cannot authorize work (HOLD).
@@ -83,6 +85,18 @@ def evaluate(
     detected = _names(checked.parts_detected)
     reported_missing = _names(checked.missing_parts)
     reported_wrong = _names(checked.wrong_parts)
+
+    # A foreign object comes first: it can hide parts or be mistaken for one, so other
+    # findings in the same frame are unreliable until the work area is cleared.
+    foreign = _names(checked.foreign_objects)
+    if foreign:
+        names = ", ".join(sorted(foreign, key=str.casefold))
+        return _decision(
+            step,
+            DecisionStatus.BLOCK,
+            f"Foreign object in the work area: {names}. Remove it and inspect {step.name} again.",
+            checked,
+        )
 
     future_detected = detected & set(rule_context.future_parts)
     if future_detected:

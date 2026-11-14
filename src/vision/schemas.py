@@ -13,6 +13,9 @@ class Observation(BaseModel):
         default_factory=list, description="Expected parts that are not visible")
     wrong_parts: list[str] = Field(
         default_factory=list, description="Visible parts that should not be there")
+    foreign_objects: list[str] = Field(
+        default_factory=list,
+        description="Short names of non-part objects in the scene (tool, rag, debris)")
     confidence: float = Field(0.0, ge=0.0, le=1.0)
     rationale: str = Field("", description="One short sentence explaining what was seen")
 

@@ -59,7 +59,9 @@ class CVSettings:
     box_parts: tuple[str, ...] = ("cover", "wrong_cover")
     box_min_solidity: float = 0.85   # contour area / convex hull area
     box_vertices: tuple[int, int] = (4, 6)   # measured: covers give 4
-    max_unexplained: float = 0.015   # non-floor pixels no part explains
+    # Non-floor pixels no part explains (a foreign object). Measured: 0.0 on every clean
+    # dataset-v2 render; the smallest test object (a screwdriver) covers ~0.13%.
+    max_unexplained: float = 0.0005
     kernel: int = 3
 
 
@@ -178,6 +180,14 @@ def box_shape_ok(mask: np.ndarray, settings: CVSettings = CVSettings()) -> tuple
 def analyse(image_bgr: np.ndarray, config: AssemblyConfig,
             settings: CVSettings = CVSettings()) -> tuple[dict[str, PartEvidence], float]:
     """Per-part evidence plus the share of foreground that no part explains."""
+    evidence, share, _ = analyse_detailed(image_bgr, config, settings)
+    return evidence, share
+
+
+def analyse_detailed(image_bgr: np.ndarray, config: AssemblyConfig,
+                     settings: CVSettings = CVSettings()
+                     ) -> tuple[dict[str, PartEvidence], float, tuple[int, int, int, int] | None]:
+    """Like analyse, plus the (x0, y0, x1, y1) box around the unexplained pixels (or None)."""
     hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
     total = float(hsv.shape[0] * hsv.shape[1])
     masks = part_masks(hsv, config, settings)
@@ -199,7 +209,12 @@ def analyse(image_bgr: np.ndarray, config: AssemblyConfig,
         explained = cv2.bitwise_or(explained, mask)
     grown = cv2.dilate(explained, np.ones((5, 5), np.uint8))   # ignore edge pixels
     unexplained = cv2.bitwise_and(foreground_mask(hsv, settings), cv2.bitwise_not(grown))
-    return evidence, cv2.countNonZero(unexplained) / total
+    points = cv2.findNonZero(unexplained)
+    box = None
+    if points is not None:
+        x, y, w, h = cv2.boundingRect(points)
+        box = (x, y, x + w, y + h)
+    return evidence, cv2.countNonZero(unexplained) / total, box
 
 
 def _blob_evidence(name: str, mask: np.ndarray, share: float,
@@ -238,8 +253,9 @@ class CVInspector(InspectorABC):
             image = cv2.imread(str(Path(image_path)), cv2.IMREAD_COLOR)
             if image is None:
                 raise ValueError(f"unreadable or missing image: {image_path}")
-            evidence, unexplained = analyse(image, self.config, self.settings)
+            evidence, unexplained, box = analyse_detailed(image, self.config, self.settings)
             observation = self._observe(evidence, unexplained, step)
+            self.last_details["unexplained_bbox"] = box
         except Exception as exc:  # noqa: BLE001 - contract: never raise
             self.last_status = "error"
             return failure_observation("error", f"OpenCV: {type(exc).__name__}: {exc}"), None

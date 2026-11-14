@@ -11,6 +11,10 @@ Policy
   the threshold (operator review).
 - Gemma failure or timeout: the OpenCV Observation is returned capped below
   the threshold, so the step goes to Needs Review instead of passing.
+- Foreign objects (with an ``identifier``): when OpenCV finds pixels no part
+  explains, Gemma is shown a crop of just that region. If it names a tool,
+  cloth or debris, the Observation lists it in ``foreign_objects`` (the rules
+  BLOCK and name it). Any other answer, or a failure, goes to operator review.
 Neither model ever sees labels; the rules engine still makes every decision.
 """
 
@@ -34,13 +38,14 @@ else:
 class HybridInspector(InspectorABC):
     def __init__(self, config: AssemblyConfig, cv: CVInspector, gemma: InspectorABC,
                  *, explain: Literal["unclear", "always"] = "unclear",
-                 threshold: float | None = None) -> None:
+                 threshold: float | None = None, identifier: Any = None) -> None:
         if explain not in ("unclear", "always"):
             raise ValueError('explain must be "unclear" or "always"')
         self.config, self.cv, self.gemma, self.explain = config, cv, gemma, explain
+        self.identifier = identifier
         self.threshold = config.confidence_threshold if threshold is None else threshold
         self.inspection_count = 0
-        self.last_status = "idle"   # cv_only | cv_explained | gemma_resolved | gemma_conflict | gemma_unavailable | error
+        self.last_status = "idle"   # cv_only | cv_explained | gemma_resolved | gemma_conflict | gemma_unavailable | foreign_identified | foreign_unconfirmed | error
         self.gemma_calls = 0
 
     def inspect(self, image_path: str | PathLike[str], step: Any) -> Observation:
@@ -56,6 +61,9 @@ class HybridInspector(InspectorABC):
         if evidence is None:                       # image unreadable: HOLD path
             self.last_status = "error"
             return cv_obs
+        if self.identifier is not None and \
+                self.cv.last_details.get("unexplained_share", 0.0) > self.cv.settings.max_unexplained:
+            return self._foreign(image_path, cv_obs)
         unsure = {n for n, e in evidence.items() if e.state == "ambiguous"}
         if cv_obs.confidence >= self.threshold and not unsure:
             if self.explain == "always":
@@ -97,6 +105,19 @@ class HybridInspector(InspectorABC):
             rationale=self._join(cv_obs.rationale,
                                  f"Gemma settled {', '.join(sorted(unsure))}: {gemma_obs.rationale}"),
         )
+
+    def _foreign(self, image_path, cv_obs: Observation) -> Observation:
+        self.gemma_calls += 1
+        found = self.identifier.identify(image_path, self.cv.last_details.get("unexplained_bbox"))
+        if found.is_foreign:
+            self.last_status = "foreign_identified"
+            return cv_obs.model_copy(update={
+                "foreign_objects": [found.label()],
+                "rationale": self._join(cv_obs.rationale, f"Gemma identified it as a {found.label()}."),
+            })
+        self.last_status = "foreign_unconfirmed"
+        said = f"Gemma: {found.label()}" if found.kind != "error" else f"Gemma unavailable ({found.detail})"
+        return self._capped(cv_obs, f"{said}; operator must check the unrecognised object.")
 
     def _ask_gemma(self, image_path, step) -> Observation:
         self.gemma_calls += 1

@@ -20,6 +20,7 @@ from typing import Any
 if __package__ and __package__.startswith("src."):
     from ..config import AssemblyConfig, load_config
     from .cv_inspector import CVInspector
+    from .foreign_objects import ForeignObjectIdentifier
     from .gemma_first_inspector import GemmaFirstInspector
     from .gemma_inspector import DEFAULT_MODEL, make_default_inspector
     from .hybrid_inspector import HybridInspector
@@ -27,6 +28,7 @@ if __package__ and __package__.startswith("src."):
 else:
     from config import AssemblyConfig, load_config
     from vision.cv_inspector import CVInspector
+    from vision.foreign_objects import ForeignObjectIdentifier
     from vision.gemma_first_inspector import GemmaFirstInspector
     from vision.gemma_inspector import DEFAULT_MODEL, make_default_inspector
     from vision.hybrid_inspector import HybridInspector
@@ -43,6 +45,14 @@ def gemma_settings() -> dict[str, Any]:
     return {"model": os.environ.get("HOLOGUIDE_MODEL_NAME") or DEFAULT_MODEL,
             "host": os.environ.get("HOLOGUIDE_MODEL_ENDPOINT") or None,
             "prompt_version": os.environ.get("HOLOGUIDE_PROMPT_VERSION") or GEMMA_PROMPT_VERSION}
+
+
+def foreign_identifier(config: AssemblyConfig | None = None) -> ForeignObjectIdentifier:
+    """Gemma on a crop of OpenCV's unexplained region; request timeout = ai_timeout_s."""
+    config = config or load_config()
+    settings = gemma_settings()
+    return ForeignObjectIdentifier(model=settings["model"], host=settings["host"],
+                                   timeout_s=config.ai_timeout_s)
 
 
 def gemma(config: AssemblyConfig | None = None) -> TimeoutInspector:
@@ -63,7 +73,8 @@ def hybrid(config: AssemblyConfig | None = None, explain: str = "unclear") -> Hy
     call already has its own ai_timeout_s, whose expiry gives Needs Review.
     """
     config = config or load_config()
-    return HybridInspector(config, CVInspector(config), gemma(config), explain=explain)
+    return HybridInspector(config, CVInspector(config), gemma(config), explain=explain,
+                           identifier=foreign_identifier(config))
 
 
 def hybrid_explained(config: AssemblyConfig | None = None) -> HybridInspector:
@@ -78,4 +89,5 @@ def gemma_first(config: AssemblyConfig | None = None) -> GemmaFirstInspector:
     (expiry gives HOLD) and the OpenCV check takes milliseconds.
     """
     config = config or load_config()
-    return GemmaFirstInspector(config, gemma(config), CVInspector(config))
+    return GemmaFirstInspector(config, gemma(config), CVInspector(config),
+                               identifier=foreign_identifier(config))

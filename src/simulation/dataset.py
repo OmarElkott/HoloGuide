@@ -9,16 +9,20 @@ from src.config import load_config
 from src.simulation.assembly_env import AssemblyEnv
 
 
-def generate(output, *, config=None, seed=0, randomize=False, correct=80, per_fault=40):
+FOREIGN_KINDS = ('screwdriver', 'wrench', 'rag')
+
+
+def generate(output, *, config=None, seed=0, randomize=False, correct=80, per_fault=40, foreign=0):
     config = config or load_config()
     output = Path(output)
-    if correct < 1 or per_fault < 1:
+    if correct < 1 or per_fault < 1 or foreign < 0:
         raise ValueError('Counts must be positive')
     # Exclusive creation protects previous datasets and partial runs.
     output.mkdir(parents=True, exist_ok=False)
     rows = []
     for kind, count in [('correct', correct), ('missing_part', per_fault),
-                        ('wrong_part', per_fault), ('wrong_order', per_fault)]:
+                        ('wrong_part', per_fault), ('wrong_order', per_fault),
+                        ('foreign_object', foreign)]:
         for i in range(count):
             # No future part exists at the final step: wrong-order cases use 1..3.
             step = 1 + i % (len(config.steps) - (kind == 'wrong_order'))
@@ -31,16 +35,22 @@ def generate(output, *, config=None, seed=0, randomize=False, correct=80, per_fa
                     present.remove('cover')
             elif kind == 'wrong_order':
                 present.extend(config.step(step + 1).adds_parts)
+            # Foreign object: a correct assembly plus a tool/rag, alternately on it and beside it.
+            fod = FOREIGN_KINDS[i % len(FOREIGN_KINDS)] if kind == 'foreign_object' else None
             sample_seed = seed + len(rows)
             image_path = f'images/{len(rows):06d}.png'
             with AssemblyEnv(config, seed=sample_seed, randomize=randomize) as env:
                 for part in present:
                     env.place_part(part)
+                if fod:
+                    env.place_foreign_object(fod, on_assembly=(i // len(FOREIGN_KINDS)) % 2 == 0)
                 env.render_to_file(str(output / image_path))
             rows.append(dict(image_path=image_path, step_id=step, mistake_type=kind,
                              expected_status='pass' if kind == 'correct' else 'block',
                              seed=sample_seed, parts_present=json.dumps(present),
                              sha256=hashlib.sha256((output / image_path).read_bytes()).hexdigest()))
+            if foreign:   # extra label column only when the dataset has foreign objects
+                rows[-1]['foreign_objects'] = json.dumps([fod] if fod else [])
     with (output / 'labels.csv').open('x', newline='', encoding='utf-8') as stream:
         writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
         writer.writeheader()
@@ -56,6 +66,10 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--randomize', action='store_true')
+    parser.add_argument('--correct', type=int, default=80)
+    parser.add_argument('--per-fault', type=int, default=40)
+    parser.add_argument('--foreign', type=int, default=0,
+                        help='foreign-object cases (a tool or rag left in the scene)')
     args = parser.parse_args()
     print(f'Generated {len(generate(**vars(args)))} images')
 

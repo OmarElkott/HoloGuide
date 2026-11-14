@@ -22,6 +22,7 @@ class AssemblyEnv:
         self.randomize = randomize
         self.client = p.connect(p.DIRECT)
         self._parts = {}
+        self._foreign = {}
         self.reset()
 
     def reset(self) -> None:
@@ -44,6 +45,7 @@ class AssemblyEnv:
         )
 
         self._parts.clear()
+        self._foreign.clear()
         self._rng = np.random.default_rng(self.seed)
         self._yaw_delta = float(self._rng.uniform(-3, 3)) if self.randomize else 0.0
         self._pitch_delta = float(self._rng.uniform(-2, 2)) if self.randomize else 0.0
@@ -202,6 +204,57 @@ class AssemblyEnv:
     def parts_present(self) -> list[str]:
         """Return the currently tracked components."""
         return list(self._parts)
+
+    # Foreign objects (FOD): things that are not assembly parts, e.g. a tool left on the
+    # cover. Each is (colour RGB, [(half_x, half_y, half_z, dx, dy), ...]) in metres.
+    FOREIGN_OBJECTS = {
+        "screwdriver": ((0.55, 0.15, 0.70), [(0.045, 0.011, 0.008, 0.0, 0.0),
+                                              (0.035, 0.003, 0.003, 0.080, 0.0)]),
+        "wrench": ((0.12, 0.12, 0.13), [(0.070, 0.011, 0.004, 0.0, 0.0),
+                                         (0.016, 0.020, 0.004, 0.080, 0.0)]),
+        "rag": ((0.10, 0.60, 0.65), [(0.050, 0.035, 0.003, 0.0, 0.0)]),
+    }
+
+    def place_foreign_object(self, kind: str, *, on_assembly: bool = True) -> None:
+        """Leave a non-part object in the scene (simulation ground truth only).
+
+        on_assembly=True lays it on top of the stack; False puts it on the table beside it.
+        Position and rotation come from the env's seeded RNG, never from the inspector.
+        """
+        if kind not in self.FOREIGN_OBJECTS:
+            raise ValueError(f"Unknown foreign object: {kind}")
+        if kind in self._foreign:
+            raise ValueError(f"{kind} is already placed")
+        rgb, boxes = self.FOREIGN_OBJECTS[kind]
+        if on_assembly:
+            cx, cy = (float(v) for v in self._rng.uniform(-0.06, 0.06, 2))
+            z = 0.08
+        else:
+            angle = float(self._rng.uniform(0, 2 * np.pi))
+            cx, cy, z = 0.27 * np.cos(angle), 0.27 * np.sin(angle), 0.0
+        yaw = float(self._rng.uniform(0, np.pi))
+        orientation = p.getQuaternionFromEuler([0, 0, yaw])
+        body_ids = []
+        for hx, hy, hz, dx, dy in boxes:
+            visual = p.createVisualShape(p.GEOM_BOX, halfExtents=[hx, hy, hz],
+                                         rgbaColor=[*rgb, 1], physicsClientId=self.client)
+            x = cx + dx * np.cos(yaw) - dy * np.sin(yaw)
+            y = cy + dx * np.sin(yaw) + dy * np.cos(yaw)
+            body_ids.append(p.createMultiBody(baseMass=0, baseVisualShapeIndex=visual,
+                                              basePosition=[x, y, z + hz],
+                                              baseOrientation=orientation,
+                                              physicsClientId=self.client))
+        self._foreign[kind] = body_ids
+
+    def remove_foreign_object(self, kind: str) -> None:
+        if kind not in self._foreign:
+            raise ValueError(f"{kind} is not currently placed")
+        for body_id in self._foreign.pop(kind):
+            p.removeBody(body_id, physicsClientId=self.client)
+
+    def foreign_present(self) -> list[str]:
+        """Ground truth: foreign objects in the scene. Must never reach an inspector."""
+        return list(self._foreign)
 
     def close(self) -> None:
         """Disconnect from the physics engine."""

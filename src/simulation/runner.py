@@ -13,7 +13,7 @@ from src.config import load_config
 from src.control.audit_log import AuditLog
 from src.control.workflow import Workflow
 from src.simulation.assembly_env import AssemblyEnv
-from src.simulation.scenarios import NAMES, get_scenario
+from src.simulation.scenarios import ALL_NAMES, get_scenario
 
 
 @dataclass
@@ -90,9 +90,14 @@ class ScenarioRunner:
                 self._remove('cover')
             elif self.name == 'wrong_cover':
                 self._remove('wrong_cover')
+            elif self.name == 'foreign_object':
+                self.env.remove_foreign_object('screwdriver')
+                self.workflow.audit.record('scenario_correction', action='remove_foreign_object',
+                                           object='screwdriver')
             self.pending_fix = False
             self.workflow.audit.record('scenario_correction_started', scenario=self.name)
-        trigger = {'missing_gasket': 2, 'wrong_cover': 3, 'wrong_order': 1}.get(self.name)
+        trigger = {'missing_gasket': 2, 'wrong_cover': 3, 'wrong_order': 1,
+                   'foreign_object': 3}.get(self.name)
         injecting = not self.fault_done and step.id == trigger
         if injecting:
             self.fault_done = True
@@ -101,7 +106,14 @@ class ScenarioRunner:
                 self.result.guard_blocked = not check.allowed
                 if check.allowed:
                     raise RuntimeError('Order guard allowed premature cover')
-            if self.name == 'wrong_cover':
+            if self.name == 'foreign_object':
+                for part in step.adds_parts:      # the step is done correctly...
+                    self._place(part)
+                # ...but a screwdriver is left on the cover (ground truth stays here).
+                self.env.place_foreign_object('screwdriver', on_assembly=True)
+                self.workflow.audit.record('simulation_fault_injected', object='screwdriver',
+                                           scenario=self.name)
+            elif self.name == 'wrong_cover':
                 self._place('wrong_cover', fault=True)
             else:
                 self._place('cover', fault=True)
@@ -148,7 +160,7 @@ def load_inspector(spec, step_id_interface=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--scenario', choices=NAMES, default='missing_gasket')
+    parser.add_argument('--scenario', choices=ALL_NAMES, default='missing_gasket')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--inspector-factory', required=True)
     parser.add_argument('--step-id-interface', action='store_true')

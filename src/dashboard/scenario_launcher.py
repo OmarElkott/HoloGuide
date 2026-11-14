@@ -1,7 +1,7 @@
 """Thin dashboard controls for the shared rendered scenario runner."""
 from uuid import uuid4
 from src.simulation.runner import ScenarioRunner
-from src.simulation.scenarios import NAMES
+from src.simulation.scenarios import ALL_NAMES
 
 
 def show_launcher(st, session):
@@ -9,7 +9,7 @@ def show_launcher(st, session):
         return
     st.subheader('Rendered scenario launcher')
     st.caption('Start with an empty, fresh session. Faults are deliberately injected and audited.')
-    name = st.selectbox('Scenario', NAMES)
+    name = st.selectbox('Scenario', ALL_NAMES)
     runner = getattr(session, 'scenario_runner', None)
     if st.button('Load scenario', disabled=runner is not None or session.workflow.last_decision is not None or session.revision != 0):
         session.scenario_runner = ScenarioRunner(name, session.environment, session.workflow,

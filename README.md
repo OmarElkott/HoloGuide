@@ -1,4 +1,7 @@
-> Integration update — 2026-11-06: This branch now includes current `main` (`866f7c0`), including Partner 2's Gemma inspector and Partner 4's dashboard. The integrated suite passed **166 tests in 13.79 seconds**. References below to an unavailable inspector describe the November 2 implementation stage; inspector source is now present, but real-model accuracy, recovery and GPU measurements are still pending. Generated artifacts remain excluded from Git. See `docs/VISION_MODULE.md` for the current vision interface.
+> **Status (2026-11-13):** complete and integrated. Real PyBullet simulation, OpenCV / Gemma 3 4B / Hybrid /
+> Gemma-first inspectors, foreign-object identification, rules, workflow, audit log, Real-mode dashboard and a
+> measured evaluation on held-out datasets. Measured results and the go/no-go reasoning: `docs/decisions.md`.
+> Walk-through with real outputs: `notebooks/hologuide_demo.ipynb`. All results are on synthetic renders.
 
 # HoloGuide
 A locally powered AI assembly system that verifies manufacturing steps and catches defects
@@ -13,6 +16,7 @@ A locally powered AI assembly system that verifies manufacturing steps and catch
 - One virtual assembly
 - Four assembly steps
 - Three mistake types: missing part, wrong part, incorrect order
+- Plus foreign objects (a tool or rag left in the work area): OpenCV finds *where*, Gemma says *what*, the rules block
 - Local AI inspection
 - Dashboard-based operator workflow
 
@@ -64,27 +68,21 @@ and reset releases resources. This is not a real-model timeout benchmark or the
 final three-minute hardware rehearsal. The scenario transcripts retain the
 mistakes, correction messages, reinspection and completion events.
 
-Real mode requires the teammate implementations; it never falls back to mocks.
-P1's unmerged `feat/sim-assembly-env` currently supplies `render_to_file(path)` and
-`close()`, but `place_part`/`remove_part` are still placeholders. No P2 inspector
-is merged. After those dependencies are ready, configure
-`HOLOGUIDE_BACKEND_FACTORY=your_team_module:create_dashboard_session`. That factory
-must return `DashboardSession(mode='real', environment=env, inspector=inspector,
-model=actual_model_name, endpoint=actual_endpoint)`. The dashboard consumes
-`render_to_file(path)`, `place_part`, `remove_part`, and `close` only; it never calls
-`parts_present()` or passes simulation truth to inspection. The actual control
-contract is `inspect(path, StepSpec)`. If P2 implements the roadmap's step-ID
-interface, explicitly wrap it with `src.dashboard.backends.StepIdInspectorAdapter`.
-No signatures are guessed. Factory construction/cleanup belongs to the integrated
-backend. Reset and garbage collection close supported resources; Streamlit has
-no reliable immediate browser-disconnect hook, so immediate tab-close cleanup
-is not guaranteed. Use reset before leaving a real session.
+Real mode never falls back to mocks. The built-in factory is
+`HOLOGUIDE_BACKEND_FACTORY=src.simulation.backend:create_session` with
+`HOLOGUIDE_INSPECTOR_FACTORY=src.vision.factories:hybrid` (or `gemma_first`, `gemma`, `cv`);
+`bash scripts/run_video_demo.sh` checks Ollama and the local model (it never pulls one), warms Gemma
+up and opens the dashboard in Real mode. The dashboard consumes `render_to_file(path)`, `place_part`,
+`remove_part`, and `close` only; it never calls `parts_present()` or passes simulation truth to
+inspection. The rendered scenario launcher includes `foreign_object` (a screwdriver left on the cover).
 
 ## Evaluation
 
-No labelled evaluation dataset or real Inspector ships in this checkout.
-Do not treat mock test outcomes as model performance. Until the dataset owner
-supplies its manifest contract, the runner supports this **provisional adapter**:
+Datasets are generated, not committed (`outputs/` is ignored):
+`python -m src.simulation.dataset --output outputs/dataset-v2 --randomize --seed 2026` (200 images) and
+`--output outputs/dataset-v3 --randomize --seed 3030 --correct 40 --per-fault 10 --foreign 60`
+(130 images incl. foreign objects). Do not treat mock test outcomes as model performance.
+The manifest format is:
 
 ```csv
 image_path,step_id,mistake_type,expected_status
@@ -93,7 +91,7 @@ image_path,step_id,mistake_type,expected_status
 Paths are relative to the manifest; step IDs reference `config/assembly.yaml`.
 Use actual case labels for `mistake_type`; expected status is `pass`, `block`,
 `needs_review`, or `hold`. Each case is evaluated independently, not as a sequential
-workflow. No data rows are supplied here because the dataset is unavailable.
+workflow.
 Only image path and StepSpec are passed to the inspector; scoring labels stay in
 the runner. The inspector implementation must also avoid reading label metadata.
 

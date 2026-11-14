@@ -8,6 +8,9 @@ Policy
   a pass: if OpenCV is sure about a part and disagrees with Gemma, or sees an
   unrecognised object, confidence is capped below the threshold and
   missing_parts is cleared, so the step goes to operator review.
+- Foreign objects (with an ``identifier``): an unrecognised object is cropped
+  and shown to Gemma; a named tool, cloth or debris goes in ``foreign_objects``
+  (the rules BLOCK). Otherwise the OpenCV veto above applies (review).
 - OpenCV unsure about a part, or unable to read the image: no veto on that
   part; Gemma's answer stands.
 Neither model ever sees labels; the rules engine still makes every decision.
@@ -31,11 +34,12 @@ else:
 
 
 class GemmaFirstInspector(InspectorABC):
-    def __init__(self, config: AssemblyConfig, gemma: InspectorABC, cv: CVInspector) -> None:
-        self.config, self.gemma, self.cv = config, gemma, cv
+    def __init__(self, config: AssemblyConfig, gemma: InspectorABC, cv: CVInspector,
+                 identifier: Any = None) -> None:
+        self.config, self.gemma, self.cv, self.identifier = config, gemma, cv, identifier
         self.inspection_count = 0
         self.gemma_calls = 0
-        self.last_status = "idle"   # agreed | cv_unsure | cv_veto | gemma_failed | error
+        self.last_status = "idle"   # agreed | cv_unsure | cv_veto | foreign_identified | gemma_failed | error
 
     def inspect(self, image_path: str | PathLike[str], step: Any) -> Observation:
         self.inspection_count += 1
@@ -67,6 +71,16 @@ class GemmaFirstInspector(InspectorABC):
         sure = {n for n, e in evidence.items() if e.state != "ambiguous"}
         conflicts = sorted(n for n in sure if (evidence[n].state == "present") != (n in detected))
         unrecognised = self.cv.last_details.get("unexplained_share", 0.0) > self.cv.settings.max_unexplained
+        if unrecognised and self.identifier is not None:
+            # Foreign-object check: Gemma names what is in OpenCV's unexplained region.
+            self.gemma_calls += 1
+            found = self.identifier.identify(image_path, self.cv.last_details.get("unexplained_bbox"))
+            if found.is_foreign:
+                self.last_status = "foreign_identified"
+                return gemma_obs.model_copy(update={
+                    "foreign_objects": [found.label()],
+                    "rationale": self._join(rationale, f"Foreign object: {found.label()}."),
+                })
         if conflicts or unrecognised:
             self.last_status = "cv_veto"
             reason = (f"OpenCV disagrees about {', '.join(names[n] for n in conflicts)}"
